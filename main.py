@@ -49,9 +49,15 @@ def decrypt_password(encrypted_password, key):
     cipher = get_cipher(key)
     return cipher.decrypt(encrypted_password.encode()).decode()
 
+def display_supported_algorithms():
+    print("Algorithmes de hachage supportés:")
+    for algo in sorted(hashlib.algorithms_available):
+        print(f"- {algo}")
+
 def register():
     username = input("Nom d'utilisateur: ")
     password = getpass.getpass("Mot de passe: ")
+    display_supported_algorithms()
     algorithm = input("Algorithme de hachage (par défaut: sha256): ") or "sha256"
     password_hash = hash_password(password, algorithm)
     
