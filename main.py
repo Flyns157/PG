@@ -214,7 +214,7 @@ def main():
             user_id, key = login()
             if user_id:
                 while True:
-                    print("\n1. Enregistrer un mot de passe\n2. Voir mes mots de passe\n3. Rechercher un mot de passe\n4. Exporter mots de passe\n5. Déconnexion")
+                    print("\n1. Enregistrer un mot de passe\n2. Voir mes mots de passe\n3. Rechercher un mot de passe\n4. Modifier un enregistrement\n5. Exporter mots de passe\n6. Déconnexion")
                     sub_choice = input("Choisissez une option: ")
                     clear_screen()
                     if sub_choice == "1":
