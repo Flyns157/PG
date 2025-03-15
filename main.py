@@ -174,6 +174,34 @@ def export_passwords(user_id, key):
             writer.writerow({"Site": site, "Identifiant": site_key, "Mot de passe": password, "Email": email, "Téléphone": phone, "Date": date})
     print("Exportation réussie dans passwords_export.csv")
 
+def modify_password(user_id, key):
+    clear_screen()
+    site = input("Site web à modifier: ")
+    conn = sqlite3.connect("password_manager.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, site, key, password, email, phone FROM passwords WHERE user_id = ? AND site = ?", (user_id, site))
+    entry = cursor.fetchone()
+    if not entry:
+        print("Aucun enregistrement trouvé pour ce site.")
+        conn.close()
+        return
+    
+    entry_id, _, old_key, encrypted_password, old_email, old_phone = entry
+    password = decrypt_password(encrypted_password, key)
+    
+    print(f"\nIdentifiant actuel: {old_key}\nMot de passe actuel: {password}\nEmail actuel: {old_email}\nTéléphone actuel: {old_phone}")
+    
+    new_key = input(f"Nouvel identifiant ({old_key} pour conserver): ") or old_key
+    new_password = getpass.getpass("Nouveau mot de passe (laisser vide pour conserver): ") or password
+    new_email = input(f"Nouvel email ({old_email} pour conserver): ") or old_email
+    new_phone = input(f"Nouveau téléphone ({old_phone} pour conserver): ") or old_phone
+    
+    encrypted_password = encrypt_password(new_password, key)
+    cursor.execute("UPDATE passwords SET key = ?, password = ?, email = ?, phone = ? WHERE id = ?", (new_key, encrypted_password, new_email, new_phone, entry_id))
+    conn.commit()
+    conn.close()
+    print("Informations mises à jour avec succès!")
+
 def main():
     create_database()
     while True:
@@ -196,8 +224,10 @@ def main():
                     elif sub_choice == "3":
                         search_password(user_id, key)
                     elif sub_choice == "4":
-                        export_passwords(user_id, key)
+                        modify_password(user_id, key)
                     elif sub_choice == "5":
+                        export_passwords(user_id, key)
+                    elif sub_choice == "6":
                         break
         elif choice == "3":
             break
