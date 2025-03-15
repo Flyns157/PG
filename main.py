@@ -205,6 +205,38 @@ def modify_password(user_id, key):
     clear_screen()
     print("Informations mises à jour avec succès!")
 
+def import_csv(user_id, key):
+    file_path = input("Entrez le chemin du fichier CSV à importer: ")
+    
+    try:
+        with open(file_path, mode='r', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            conn = sqlite3.connect("password_manager.db")
+            cursor = conn.cursor()
+            
+            for row in reader:
+                site = row.get('Site')
+                site_key = row.get('Identifiant')
+                password = row.get('Mot de passe')
+                email = row.get('Email', None)
+                phone = row.get('Téléphone', None)
+
+                if site and site_key and password:  # S'assurer que les données essentielles sont présentes
+                    encrypted_password = encrypt_password(password, key)
+                    cursor.execute("""
+                        INSERT INTO passwords (user_id, site, key, password, email, phone) 
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (user_id, site, site_key, encrypted_password, email, phone))
+            
+            conn.commit()
+            conn.close()
+
+            clear_screen()
+            print("Importation réussie!")
+    except Exception as e:
+        clear_screen()
+        print(f"Erreur lors de l'importation du fichier CSV: {e}")
+
 def main():
     create_database()
     while True:
@@ -217,7 +249,7 @@ def main():
             user_id, key = login()
             if user_id:
                 while True:
-                    print("\n1. Enregistrer un mot de passe\n2. Voir mes mots de passe\n3. Rechercher un mot de passe\n4. Modifier un enregistrement\n5. Exporter mots de passe\n6. Déconnexion")
+                    print("\n1. Enregistrer un mot de passe\n2. Voir mes mots de passe\n3. Rechercher un mot de passe\n4. Modifier un enregistrement\n5. Exporter mots de passe\n6. Importer mots de passe depuis CSV\n7. Déconnexion")
                     sub_choice = input("Choisissez une option: ")
                     clear_screen()
                     if sub_choice == "1":
@@ -231,6 +263,8 @@ def main():
                     elif sub_choice == "5":
                         export_passwords(user_id, key)
                     elif sub_choice == "6":
+                        import_csv(user_id, key)
+                    elif sub_choice == "7":
                         break
         elif choice == "3":
             break
