@@ -200,6 +200,8 @@ def modify_password(user_id, key):
     cursor.execute("UPDATE passwords SET key = ?, password = ?, email = ?, phone = ? WHERE id = ?", (new_key, encrypted_password, new_email, new_phone, entry_id))
     conn.commit()
     conn.close()
+
+    clear_screen()
     print("Informations mises à jour avec succès!")
 
 def main():
