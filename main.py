@@ -3,7 +3,11 @@ import hashlib
 import getpass
 import base64
 import os
+import sys
 from cryptography.fernet import Fernet
+
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 def create_database():
     conn = sqlite3.connect("password_manager.db")
@@ -56,8 +60,10 @@ def display_supported_algorithms():
         print(f"- {algo}")
 
 def register():
+    clear_screen()
     username = input("Nom d'utilisateur: ")
     password = getpass.getpass("Mot de passe: ")
+    clear_screen()
     display_supported_algorithms()
     algorithm = input("Algorithme de hachage (par défaut: sha256): ") or "sha256"
     password_hash = hash_password(password, algorithm)
@@ -75,6 +81,7 @@ def register():
     conn.close()
 
 def login():
+    clear_screen()
     username = input("Nom d'utilisateur: ")
     password = getpass.getpass("Mot de passe: ")
     conn = sqlite3.connect("password_manager.db")
@@ -88,6 +95,7 @@ def login():
     if hash_password(password, algorithm) != stored_hash:
         print("Mot de passe incorrect.")
         return None, None
+    clear_screen()
     print("Connexion réussie!")
     return user_id, encryption_key
 
@@ -144,6 +152,7 @@ def search_password(user_id, key):
 def main():
     create_database()
     while True:
+        clear_screen()
         print("\n1. S'inscrire\n2. Se connecter\n3. Quitter")
         choice = input("Choisissez une option: ")
         if choice == "1":
@@ -154,6 +163,7 @@ def main():
                 while True:
                     print("\n1. Enregistrer un mot de passe\n2. Voir mes mots de passe\n3. Rechercher un mot de passe\n4. Déconnexion")
                     sub_choice = input("Choisissez une option: ")
+                    clear_screen()
                     if sub_choice == "1":
                         save_password(user_id, key)
                     elif sub_choice == "2":
