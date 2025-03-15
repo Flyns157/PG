@@ -131,7 +131,7 @@ def retrieve_passwords(user_id, key):
     for entry in entries:
         site, site_key, encrypted_password, email, phone, date = entry
         password = decrypt_password(encrypted_password, key)
-        print(f"\nSite: {site}\nIdentifiant: {site_key}\nMot de passe: {password}\nE-mail: {email}\nTéléphone: {phone}\nDate d'ajout: {date}")
+        print(f"\nSite: {site}\nIdentifiant: {site_key}\nMot de passe: {password}\nE-mail: {email or 'Non spécifié'}\nTéléphone: {phone or 'Non spécifié'}\nDate d'ajout: {date}")
 
 def search_password(user_id, key):
     search_term = input("Entrez le site ou l'identifiant à rechercher: ")
@@ -151,7 +151,7 @@ def search_password(user_id, key):
     for entry in entries:
         site, site_key, encrypted_password, email, phone, date = entry
         password = decrypt_password(encrypted_password, key)
-        print(f"\nSite: {site}\nIdentifiant: {site_key}\nMot de passe: {password}\nE-mail: {email}\nTéléphone: {phone}\nDate d'ajout: {date}")
+        print(f"\nSite: {site}\nIdentifiant: {site_key}\nMot de passe: {password}\nE-mail: {email or 'Non spécifié'}\nTéléphone: {phone or 'Non spécifié'}\nDate d'ajout: {date}")
 
 def export_passwords(user_id, key):
     clear_screen()
