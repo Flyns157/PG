@@ -28,6 +28,7 @@ def create_database():
                         email TEXT,
                         phone TEXT,
                         date_added TEXT DEFAULT CURRENT_TIMESTAMP,
+                        date_updated TEXT DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (user_id) REFERENCES users(id)
                     )''')
     conn.commit()
@@ -197,7 +198,7 @@ def modify_password(user_id, key):
     new_phone = input(f"Nouveau téléphone ({old_phone} pour conserver): ") or old_phone
     
     encrypted_password = encrypt_password(new_password, key)
-    cursor.execute("UPDATE passwords SET key = ?, password = ?, email = ?, phone = ? WHERE id = ?", (new_key, encrypted_password, new_email, new_phone, entry_id))
+    cursor.execute("UPDATE passwords SET key = ?, password = ?, email = ?, phone = ?, date_updated = CURRENT_TIMESTAMP WHERE id = ?", (new_key, encrypted_password, new_email, new_phone, entry_id))
     conn.commit()
     conn.close()
 
