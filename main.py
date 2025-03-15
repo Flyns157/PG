@@ -55,9 +55,9 @@ def display_supported_algorithms():
         print(f"- {algo}")
 
 def register():
+    display_supported_algorithms()
     username = input("Nom d'utilisateur: ")
     password = getpass.getpass("Mot de passe: ")
-    display_supported_algorithms()
     algorithm = input("Algorithme de hachage (par défaut: sha256): ") or "sha256"
     password_hash = hash_password(password, algorithm)
     
@@ -121,6 +121,24 @@ def retrieve_passwords(user_id, key):
         password = decrypt_password(encrypted_password, key)
         print(f"\nSite: {site}\nIdentifiant: {site_key}\nMot de passe: {password}\nE-mail: {email}\nTéléphone: {phone}\nDate d'ajout: {date}")
 
+def search_password(user_id, key):
+    search_term = input("Entrez le site ou l'identifiant à rechercher: ")
+    conn = sqlite3.connect("password_manager.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT site, key, password, email, phone, date_added FROM passwords WHERE user_id = ? AND (site LIKE ? OR key LIKE ?)",
+                   (user_id, f"%{search_term}%", f"%{search_term}%"))
+    entries = cursor.fetchall()
+    conn.close()
+    
+    if not entries:
+        print("Aucun mot de passe trouvé pour cette recherche.")
+        return
+    
+    for entry in entries:
+        site, site_key, encrypted_password, email, phone, date = entry
+        password = decrypt_password(encrypted_password, key)
+        print(f"\nSite: {site}\nIdentifiant: {site_key}\nMot de passe: {password}\nE-mail: {email}\nTéléphone: {phone}\nDate d'ajout: {date}")
+
 def main():
     create_database()
     while True:
@@ -133,13 +151,15 @@ def main():
             if user_id:
                 key = generate_key()
                 while True:
-                    print("\n1. Enregistrer un mot de passe\n2. Voir mes mots de passe\n3. Déconnexion")
+                    print("\n1. Enregistrer un mot de passe\n2. Voir mes mots de passe\n3. Rechercher un mot de passe\n4. Déconnexion")
                     sub_choice = input("Choisissez une option: ")
                     if sub_choice == "1":
                         save_password(user_id, key)
                     elif sub_choice == "2":
                         retrieve_passwords(user_id, key)
                     elif sub_choice == "3":
+                        search_password(user_id, key)
+                    elif sub_choice == "4":
                         break
         elif choice == "3":
             break
