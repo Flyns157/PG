@@ -12,7 +12,8 @@ def create_database():
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         username TEXT UNIQUE NOT NULL,
                         password_hash TEXT NOT NULL,
-                        hash_algorithm TEXT NOT NULL
+                        hash_algorithm TEXT NOT NULL,
+                        encryption_key TEXT NOT NULL
                     )''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS passwords (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,10 +37,10 @@ def hash_password(password, algorithm="sha256"):
     return hasher.hexdigest()
 
 def generate_key():
-    return base64.urlsafe_b64encode(os.urandom(32))
+    return base64.urlsafe_b64encode(os.urandom(32)).decode()
 
 def get_cipher(key):
-    return Fernet(key)
+    return Fernet(key.encode())
 
 def encrypt_password(password, key):
     cipher = get_cipher(key)
@@ -55,17 +56,18 @@ def display_supported_algorithms():
         print(f"- {algo}")
 
 def register():
-    display_supported_algorithms()
     username = input("Nom d'utilisateur: ")
     password = getpass.getpass("Mot de passe: ")
+    display_supported_algorithms()
     algorithm = input("Algorithme de hachage (par défaut: sha256): ") or "sha256"
     password_hash = hash_password(password, algorithm)
+    encryption_key = generate_key()
     
     conn = sqlite3.connect("password_manager.db")
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO users (username, password_hash, hash_algorithm) VALUES (?, ?, ?)",
-                       (username, password_hash, algorithm))
+        cursor.execute("INSERT INTO users (username, password_hash, hash_algorithm, encryption_key) VALUES (?, ?, ?, ?)",
+                       (username, password_hash, algorithm, encryption_key))
         conn.commit()
         print("Utilisateur enregistré avec succès!")
     except sqlite3.IntegrityError:
@@ -77,17 +79,17 @@ def login():
     password = getpass.getpass("Mot de passe: ")
     conn = sqlite3.connect("password_manager.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT id, password_hash, hash_algorithm FROM users WHERE username = ?", (username,))
+    cursor.execute("SELECT id, password_hash, hash_algorithm, encryption_key FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
     if not user:
         print("Utilisateur non trouvé.")
-        return None
-    user_id, stored_hash, algorithm = user
+        return None, None
+    user_id, stored_hash, algorithm, encryption_key = user
     if hash_password(password, algorithm) != stored_hash:
         print("Mot de passe incorrect.")
-        return None
+        return None, None
     print("Connexion réussie!")
-    return user_id
+    return user_id, encryption_key
 
 def save_password(user_id, key):
     site = input("Site web: ")
@@ -147,9 +149,8 @@ def main():
         if choice == "1":
             register()
         elif choice == "2":
-            user_id = login()
+            user_id, key = login()
             if user_id:
-                key = generate_key()
                 while True:
                     print("\n1. Enregistrer un mot de passe\n2. Voir mes mots de passe\n3. Rechercher un mot de passe\n4. Déconnexion")
                     sub_choice = input("Choisissez une option: ")
