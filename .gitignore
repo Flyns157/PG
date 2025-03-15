@@ -175,3 +175,7 @@ cython_debug/
 
 pm.db
 password_manager.db
+
+*.csv
+*.json
+*.log
