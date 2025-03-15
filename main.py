@@ -4,6 +4,7 @@ import getpass
 import base64
 import os
 import sys
+import csv
 from cryptography.fernet import Fernet
 
 def clear_screen():
@@ -152,6 +153,28 @@ def search_password(user_id, key):
         password = decrypt_password(encrypted_password, key)
         print(f"\nSite: {site}\nIdentifiant: {site_key}\nMot de passe: {password}\nE-mail: {email}\nTéléphone: {phone}\nDate d'ajout: {date}")
 
+def export_passwords(user_id, key):
+    clear_screen()
+    conn = sqlite3.connect("password_manager.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT site, key, password, email, phone, date_added FROM passwords WHERE user_id = ?", (user_id,))
+    entries = cursor.fetchall()
+    conn.close()
+    
+    if not entries:
+        print("Aucun mot de passe enregistré.")
+        return
+    
+    with open("passwords_export.csv", "w", newline="", encoding="utf-8") as csvfile:
+        fieldnames = ["Site", "Identifiant", "Mot de passe", "Email", "Téléphone", "Date"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for entry in entries:
+            site, site_key, encrypted_password, email, phone, date = entry
+            password = decrypt_password(encrypted_password, key)
+            writer.writerow({"Site": site, "Identifiant": site_key, "Mot de passe": password, "Email": email, "Téléphone": phone, "Date": date})
+    print("Exportation réussie dans passwords_export.csv")
+
 def main():
     create_database()
     while True:
@@ -164,7 +187,7 @@ def main():
             user_id, key = login()
             if user_id:
                 while True:
-                    print("\n1. Enregistrer un mot de passe\n2. Voir mes mots de passe\n3. Rechercher un mot de passe\n4. Déconnexion")
+                    print("\n1. Enregistrer un mot de passe\n2. Voir mes mots de passe\n3. Rechercher un mot de passe\n4. Exporter mots de passe\n5. Déconnexion")
                     sub_choice = input("Choisissez une option: ")
                     clear_screen()
                     if sub_choice == "1":
@@ -174,6 +197,8 @@ def main():
                     elif sub_choice == "3":
                         search_password(user_id, key)
                     elif sub_choice == "4":
+                        export_passwords(user_id, key)
+                    elif sub_choice == "5":
                         break
         elif choice == "3":
             break
