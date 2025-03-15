@@ -3,7 +3,6 @@ import hashlib
 import getpass
 import base64
 import os
-import sys
 import csv
 from cryptography.fernet import Fernet
 
