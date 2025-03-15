@@ -126,6 +126,7 @@ def retrieve_passwords(user_id, key):
         print("Aucun mot de passe enregistré.")
         return
     
+    print("\nListe des mots de passe enregistrés:")
     for entry in entries:
         site, site_key, encrypted_password, email, phone, date = entry
         password = decrypt_password(encrypted_password, key)
@@ -144,6 +145,8 @@ def search_password(user_id, key):
         print("Aucun mot de passe trouvé pour cette recherche.")
         return
     
+    clear_screen()
+    print(f"""\nListe des informations de connections correspondantes à la recherche\n\n-> Recherche: "{search_term}"\n""")
     for entry in entries:
         site, site_key, encrypted_password, email, phone, date = entry
         password = decrypt_password(encrypted_password, key)
