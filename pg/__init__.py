@@ -268,6 +268,3 @@ def main():
                         break
         elif choice == "3":
             break
-
-if __name__ == "__main__":
-    main()
