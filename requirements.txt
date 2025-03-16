@@ -1,1 +1,4 @@
 cryptography
+sqlalchemy
+pydantic
+pydantic-extra-types[phonenumbers]
