@@ -1,63 +1,16 @@
 import sqlite3
-import hashlib
 import getpass
-import base64
-import os
 import csv
 from cryptography.fernet import Fernet
 
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
+from .utils.visual import clear_screen
+from .data.database import create_database
+from .utils.security import hash_password, generate_key, encrypt_password, decrypt_password, supported_algorithms
 
-def create_database():
-    conn = sqlite3.connect("password_manager.db")
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        username TEXT UNIQUE NOT NULL,
-                        password_hash TEXT NOT NULL,
-                        hash_algorithm TEXT NOT NULL,
-                        encryption_key TEXT NOT NULL
-                    )''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS passwords (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER,
-                        site TEXT NOT NULL,
-                        key TEXT NOT NULL,
-                        password TEXT NOT NULL,
-                        email TEXT,
-                        phone TEXT,
-                        date_added TEXT DEFAULT CURRENT_TIMESTAMP,
-                        date_updated TEXT DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (user_id) REFERENCES users(id)
-                    )''')
-    conn.commit()
-    conn.close()
-
-def hash_password(password, algorithm="sha256"):
-    if algorithm not in hashlib.algorithms_available:
-        raise ValueError("Algorithme non supporté")
-    hasher = hashlib.new(algorithm)
-    hasher.update(password.encode('utf-8'))
-    return hasher.hexdigest()
-
-def generate_key():
-    return base64.urlsafe_b64encode(os.urandom(32)).decode()
-
-def get_cipher(key):
-    return Fernet(key.encode())
-
-def encrypt_password(password, key):
-    cipher = get_cipher(key)
-    return cipher.encrypt(password.encode()).decode()
-
-def decrypt_password(encrypted_password, key):
-    cipher = get_cipher(key)
-    return cipher.decrypt(encrypted_password.encode()).decode()
 
 def display_supported_algorithms():
     print("Algorithmes de hachage supportés:")
-    for algo in sorted(hashlib.algorithms_available):
+    for algo in supported_algorithms():
         print(f"- {algo}")
 
 def register():
