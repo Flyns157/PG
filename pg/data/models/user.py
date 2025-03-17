@@ -1,4 +1,8 @@
 # pg.data.models.user.py
+"""
+Modèle de données pour les utilisateurs
+"""
+
 from pydantic import BaseModel, Field, field_validator
 
 from .password import Password

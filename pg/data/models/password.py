@@ -1,4 +1,8 @@
 # pg.data.models.password.py
+"""
+Modèle de données pour les mots de passe
+"""
+
 from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime
 
