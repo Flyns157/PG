@@ -4,36 +4,13 @@ Modèle de données pour les mots de passe
 """
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
-from pydantic import BaseModel, Field, EmailStr, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, EmailStr, HttpUrl
 from pydantic_extra_types.phone_numbers import PhoneNumber
 from datetime import datetime
 
-from pg.utils.security import encrypt_password
+from pg.utils.security import encrypt_password, decrypt_password
 from . import Base
 
-
-class PasswordValidator(BaseModel):
-    id: int | None = Field(..., description="Identifiant de l'enregistrement d'informations de connection")
-    site: str | HttpUrl = Field(..., description="Nom / URL du site ou du service")
-    key: str = Field(..., description="Clé ou identifiant pour le site")
-    password_encrypted: str = Field(..., description="Mot de passe chiffré")
-    email: EmailStr | None = Field(None, description="Email associé au compte")
-    phone: PhoneNumber | None = Field(None, description="Numéro de téléphone associé au compte")
-    date_added: datetime = Field(default_factory=datetime.now, description="Date de création du mot de passe")
-    date_updated: datetime = Field(default_factory=datetime.now, description="Date de dernière modification du mot de passe")
-
-    def to_ORM(self):
-        return PasswordORM(
-            id=self.id,
-            user_id=None,
-            site=self.site,
-            key=self.key,
-            password_encrypted=self.password_encrypted,
-            email=self.email,
-            phone=self.phone,
-            date_added=self.date_added,
-            date_updated=self.date_updated
-        )
 
 class PasswordORM(Base):
     """
@@ -48,40 +25,59 @@ class PasswordORM(Base):
     password_encrypted = Column(String, nullable=False)
     email = Column(String, nullable=True)
     phone = Column(String, nullable=True)
-    date_added = Column(DateTime, default=datetime.now())
-    date_updated = Column(DateTime, default=datetime.now(), onupdate=datetime.now())
+    date_added = Column(DateTime, default=datetime.now)
+    date_updated = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def __pre_init__(self, **kwargs):
+        Password(**kwargs)
+    
+    
+    @validates('password_encrypted')
+    def encrypt_password_field(self, key, password: str):
+        return encrypt_password(password)
+
+    @property
+    def password(self):
+        return decrypt_password(self.password_encrypted)
+
+    @password.setter
+    def password(self, value: str):
+        self.password_encrypted = encrypt_password(value)
 
     def to_validator(self):
-        return PasswordValidator(
-            id=self.id,
-            site=self.site,
-            key=self.key,
-            password_encrypted=self.password_encrypted,
-            email=self.email,
-            phone=self.phone,
-            date_added=self.date_added,
-            date_updated=self.date_updated
-        )
+        return Password.model_validate(self)
 
-class PasswordCreate(PasswordValidator):
-    def __init__(
-            self,
-            *,
-            site: str | HttpUrl, 
-            key: str, password: str, 
-            email: EmailStr | None, 
-            phone: PhoneNumber | None,
-            user_key: str | bytes,
-        ) -> None:
-        super().__init__(
-            site=site,
-            key=key,
-            password_encrypted=encrypt_password(password, user_key),
-            email=email,
-            phone=phone
-        )
+
+class PasswordBase(BaseModel):
+    site: str | HttpUrl = Field(..., description="Nom / URL du site ou du service")
+    key: str = Field(..., description="Clé ou identifiant pour le site")
+    password_encrypted: str = Field(..., description="Mot de passe chiffré")
+    email: EmailStr | None = Field(None, description="Email associé au compte")
+    phone: PhoneNumber | None = Field(None, description="Numéro de téléphone associé au compte")
+
+class Password(PasswordBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int | None = Field(..., description="Identifiant de l'enregistrement d'informations de connection")
+    date_added: datetime = Field(default_factory=datetime.now, description="Date de création du mot de passe")
+    date_updated: datetime = Field(default_factory=datetime.now, description="Date de dernière modification du mot de passe")
+
+    def to_orm(self):
+        return PasswordORM(**self.model_dump())
+    
+    def __str__(self):
+        return f"Password(id={self.id}, site={self.site}, email={self.email}, phone={self.phone})"
+
+    def __repr__(self):
+        return f"Password(id={self.id!r}, site={self.site!r}, email={self.email!r}, phone={self.phone!r})"
+
+class PasswordCreate(PasswordBase):
+    ...
     
 
-class PasswordUpdate(PasswordCreate):
-    # TODO: Implement update password
-    ...
+class PasswordUpdate(BaseModel):
+    """Modèle pour la mise à jour d'un mot de passe (sans `site`)"""
+    key: str | None = None
+    password_encrypted: str | None = None
+    email: EmailStr | None = None
+    phone: PhoneNumber | None = None
