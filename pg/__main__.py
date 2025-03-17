@@ -1,5 +1,5 @@
 # pg.__main__.py
-from . import main
+from pg import main
 
 if __name__ == "__main__":
     main()
