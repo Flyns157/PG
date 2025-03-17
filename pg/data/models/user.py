@@ -3,10 +3,25 @@
 Modèle de données pour les utilisateurs
 """
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
+from sqlalchemy import Column, Integer, String
 
+from . import Base
 from .password import Password
 from ...utils.security import validate_password_strength
+
+
+class UserORM(Base):
+    """
+    Modèle SQLAlchemy pour les utilisateurs
+    """
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String, nullable=False)
+    password_hash = Column(String, nullable=False)
+    hash_algorithm = Column(String, nullable=False)
+    encryption_key = Column(String, nullable=False)
 
 
 class UserBase(BaseModel):
@@ -19,7 +34,6 @@ class UserCreate(UserBase):
     def password_strength(cls, v: str):
         return validate_password_strength(v)
 
-
 class UserUpdate(BaseModel):
     password: str | None = None
     
@@ -28,6 +42,8 @@ class UserUpdate(BaseModel):
         return validate_password_strength(v)
 
 class User(UserBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     password_hash: str
     hash_algorithm: str
