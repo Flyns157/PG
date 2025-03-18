@@ -54,6 +54,7 @@ class PasswordCreate(PasswordBase):
 
 class PasswordUpdate(SQLModel, AutoStrRepr):
     """Modèle pour la mise à jour d'un mot de passe (sans `site`)"""
+    description: str | None = None
     key: str | None = None
     password_encrypted: str | None = None
     email: EmailStr | None = None
