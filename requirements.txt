@@ -5,3 +5,4 @@ pydantic[email]
 pydantic-extra-types[phonenumbers]
 fuzzywuzzy
 python-Levenshtein
+sqlmodel
