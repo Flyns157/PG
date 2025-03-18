@@ -1,4 +1,5 @@
 cryptography
 sqlalchemy
 pydantic
+pydantic[email]
 pydantic-extra-types[phonenumbers]
