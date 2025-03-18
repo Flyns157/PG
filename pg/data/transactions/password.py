@@ -15,7 +15,7 @@ def save_password(user_id, key):
     encrypted_password = encrypt_password(password, key)
     conn = sqlite3.connect("password_manager.db")
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO passwords (user_id, site, key, password, email, phone) VALUES (?, ?, ?, ?, ?, ?)",
+    cursor.execute("INSERT INTO password (user_id, site, key, password, email, phone) VALUES (?, ?, ?, ?, ?, ?)",
                    (user_id, site, site_key, encrypted_password, email, phone))
     conn.commit()
     conn.close()
@@ -24,7 +24,7 @@ def save_password(user_id, key):
 def retrieve_passwords(user_id, key):
     conn = sqlite3.connect("password_manager.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT site, key, password, email, phone, date_added FROM passwords WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT site, key, password, email, phone, date_added FROM password WHERE user_id = ?", (user_id,))
     entries = cursor.fetchall()
     conn.close()
     
@@ -61,7 +61,7 @@ def modify_password(user_id, key):
     new_phone = input(f"Nouveau téléphone ({old_phone} pour conserver): ") or old_phone
     
     encrypted_password = encrypt_password(new_password, key)
-    cursor.execute("UPDATE passwords SET key = ?, password = ?, email = ?, phone = ?, date_updated = CURRENT_TIMESTAMP WHERE id = ?", (new_key, encrypted_password, new_email, new_phone, entry_id))
+    cursor.execute("UPDATE password SET key = ?, password = ?, email = ?, phone = ?, date_updated = CURRENT_TIMESTAMP WHERE id = ?", (new_key, encrypted_password, new_email, new_phone, entry_id))
     conn.commit()
     conn.close()
 

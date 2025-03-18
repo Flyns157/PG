@@ -18,7 +18,7 @@ def register():
     conn = sqlite3.connect("password_manager.db")
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO users (username, password_hash, hash_algorithm, encryption_key) VALUES (?, ?, ?, ?)",
+        cursor.execute("INSERT INTO user (username, password_hash, hash_algorithm, encryption_key) VALUES (?, ?, ?, ?)",
                        (username, password_hash, algorithm, encryption_key))
         conn.commit()
         print("Utilisateur enregistré avec succès!")
@@ -32,7 +32,7 @@ def login():
     password = getpass.getpass("Mot de passe: ")
     conn = sqlite3.connect("password_manager.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT id, password_hash, hash_algorithm, encryption_key FROM users WHERE username = ?", (username,))
+    cursor.execute("SELECT id, password_hash, hash_algorithm, encryption_key FROM user WHERE username = ?", (username,))
     user = cursor.fetchone()
     if not user:
         print("Utilisateur non trouvé.")

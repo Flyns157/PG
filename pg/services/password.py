@@ -9,7 +9,7 @@ def search_password(user_id, key):
     search_term = input("Entrez le site ou l'identifiant à rechercher: ")
     conn = sqlite3.connect("password_manager.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT site, key, password, email, phone, date_added FROM passwords WHERE user_id = ? AND (site LIKE ? OR key LIKE ?)",
+    cursor.execute("SELECT site, key, password, email, phone, date_added FROM password WHERE user_id = ? AND (site LIKE ? OR key LIKE ?)",
                    (user_id, f"%{search_term}%", f"%{search_term}%"))
     entries = cursor.fetchall()
     conn.close()

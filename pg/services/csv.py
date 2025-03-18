@@ -10,7 +10,7 @@ def export_passwords(user_id, key):
     clear_screen()
     conn = sqlite3.connect("password_manager.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT site, key, password, email, phone, date_added FROM passwords WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT site, key, password, email, phone, date_added FROM password WHERE user_id = ?", (user_id,))
     entries = cursor.fetchall()
     conn.close()
     
@@ -48,7 +48,7 @@ def import_csv(user_id, key):
                 if site and site_key and password:  # S'assurer que les données essentielles sont présentes
                     encrypted_password = encrypt_password(password, key)
                     cursor.execute("""
-                        INSERT INTO passwords (user_id, site, key, password, email, phone) 
+                        INSERT INTO password (user_id, site, key, password, email, phone) 
                         VALUES (?, ?, ?, ?, ?, ?)
                     """, (user_id, site, site_key, encrypted_password, email, phone))
             
