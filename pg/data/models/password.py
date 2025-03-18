@@ -13,10 +13,11 @@ from ...utils.debugging import AutoStrRepr
 
 
 class PasswordBase(SQLModel, AutoStrRepr):
+    user_id: int = Field(foreign_key="user.id", description="Identifiant de l'utilisateur")
     url: HttpUrl = Field(description="URL du site / service")
-    description: str = Field(description="Description par l'utilisateur du site / service")
+    description: str | None = Field(description="Description par l'utilisateur du site / service")
     key: str = Field(description="Clé / identifiant")
-    password_encrypted: str = Field(..., description="Mot de passe chiffré")
+    password_encrypted: str = Field(description="Mot de passe chiffré")
     email: EmailStr | None = Field(description="Email associé")
     phone: PhoneNumber | None = Field(description="Numéro de téléphone associé")
 
