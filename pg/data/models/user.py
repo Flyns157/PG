@@ -18,7 +18,8 @@ class User(UserBase, table = True):
     hash_algorithm: str = Field(description="Le nom de l'algorith de crypptage à utiliser pour cet utilisateur")
     encryption_key: str = Field(description="La clef de hachage à utiliser pour cet utilisateur")
 
-    passwords: list["Password"] = Relationship(back_populates="user", description="La liste des mots de passe enregistrés pour cet utilisateur")
+    # Relationship to the Password model, setting up a one-to-many relationship
+    passwords: list["Password"] = Relationship(back_populates="user")
 
     def verify_password(self, password: str) -> bool:
         """

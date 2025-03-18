@@ -26,6 +26,7 @@ class Password(PasswordBase, table=True):
     date_added: datetime = Field(default_factory=datetime.now, description="Date de création du mot de passe")
     date_updated: datetime = Field(default_factory=datetime.now, description="Date de dernière modification du mot de passe")
 
+    # Relationship to the User model, setting up a one-to-many relationship
     user: "User" = Relationship(back_populates="passwords")
     
     def __str__(self):
