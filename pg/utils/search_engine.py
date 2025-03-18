@@ -3,7 +3,7 @@ from fuzzywuzzy import process
 
 from ..data.models import Password
 
-def trouver_objets_proches(liste_objets: Password, cible: str):
+def trouver_objets_proches(liste_objets: Password, cible: str) -> list[Password]:
     """
     Trouve les objets dont l'attribut .url est le plus proche de la chaîne cible.
 
