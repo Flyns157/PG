@@ -31,13 +31,13 @@ def main():
                     sub_choice = input("Choisissez une option: ")
                     clear_screen()
                     if sub_choice == "1":
-                        save_password(user_id, key)
+                        save_password(user_id)
                     elif sub_choice == "2":
-                        retrieve_passwords(user_id, key)
+                        retrieve_passwords(user_id)
                     elif sub_choice == "3":
                         search_password(user_id, key)
                     elif sub_choice == "4":
-                        modify_password(user_id, key)
+                        modify_password(user_id)
                     elif sub_choice == "5":
                         export_passwords(user_id, key)
                     elif sub_choice == "6":
