@@ -32,6 +32,7 @@ class Password(PasswordBase, table=True):
     def __str__(self):
         from ...utils.security import decrypt_password
         from ..database import engine
+        from .import User
 
         from sqlmodel import Session, select
         with Session(engine) as session:
@@ -46,7 +47,7 @@ class Password(PasswordBase, table=True):
                 f"Email: {self.email or 'Non spécifié'}\n" \
                 f"Téléphone: {self.phone or 'Non spécifié'}\n" \
                 f"Date de création: {self.date_added}\n" \
-                f"Date de dernière modification: {self.date_updated}\n"
+                f"Date de dernière modification: {self.date_updated}"
 
 class PasswordCreate(PasswordBase):
     ...
