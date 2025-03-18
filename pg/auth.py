@@ -2,7 +2,7 @@
 import getpass
 
 from .utils.visual import clear_screen, display_supported_algorithms
-from .utils.security import hash_password, generate_key
+from .utils.security import hash_password, validate_password_strength
 
 from sqlmodel import Session, select
 from .data.database import engine
@@ -12,21 +12,35 @@ def register():
     clear_screen()
     username = input("Nom d'utilisateur: ")
     password = getpass.getpass("Mot de passe: ")
+    def vp(password):
+        try:
+            return validate_password_strength(password)
+        except ValueError as e:
+            print(e)
+            return False
+    while vp(password) is False:
+        password = getpass.getpass("Mot de passe: ")
+
     clear_screen()
     display_supported_algorithms()
     algorithm = input("Algorithme de hachage (par défaut: sha256): ") or "sha256"
     password_hash = hash_password(password, algorithm)
-    encryption_key = generate_key()
     
     try:
         with Session(engine) as session:
-            new_user = User(username=username, password_hash=password_hash, hash_algorithm=algorithm, encryption_key=encryption_key)
+            new_user = User(
+                username=username, 
+                password_hash=password_hash,
+                hash_algorithm=algorithm
+            )
+            
             session.add(new_user)
             session.commit()
 
         print("Utilisateur enregistré avec succès!")
     except Exception as e:
         print(e)
+        input("Appuyez sur entrée pour continuer...")
 
 def login():
     clear_screen()
