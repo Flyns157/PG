@@ -24,8 +24,8 @@ class User(UserBase, table = True):
 
     def __init__(self, **data):
         try:
-            validated_data = UserBase.model_validate(data)
-            super().__init__(**validated_data.model_dump())
+            UserBase.model_validate(data)
+            super().__init__(**data)
         except ValidationError as e:
             raise ValueError(f"Invalid data: {e}")
 
