@@ -52,7 +52,7 @@ def import_csv(user_id):
                     record["date_added"] = datetime.fromisoformat(record["date_added"])
                     record["date_updated"] = datetime.fromisoformat(record["date_updated"])
 
-                    session.add(Password(**record, user_id=user_id))
+                    session.add(Password(**{k:v for k, v in record.items() if v}, user_id=user_id))
                 session.commit()
 
             print("Importation réussie!")
