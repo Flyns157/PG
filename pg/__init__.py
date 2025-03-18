@@ -35,7 +35,7 @@ def main():
                     elif sub_choice == "2":
                         retrieve_passwords(user_id)
                     elif sub_choice == "3":
-                        search_password(user_id, key)
+                        search_password(user_id)
                     elif sub_choice == "4":
                         modify_password(user_id)
                     elif sub_choice == "5":
