@@ -1,14 +1,22 @@
 # pg.__init__.py
 from .utils.visual import clear_screen
-from .data.database import create_database
+from .data.database import engine
 from .auth import register, login
 from .data.transactions.password import save_password, retrieve_passwords, modify_password
 from .services.csv import export_passwords, import_csv
 from .services.password import search_password
 
+from .data.models import *
+
+from sqlmodel import SQLModel
+
+def init():
+    clear_screen()
+    print("Bienvenue dans Password Gestion!")
+    SQLModel.metadata.create_all(engine)
 
 def main():
-    create_database()
+    init()
     while True:
         clear_screen()
         print("\n1. S'inscrire\n2. Se connecter\n3. Quitter")
