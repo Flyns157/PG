@@ -4,22 +4,23 @@ Modèles de données pour les mots de passe
 """
 
 from pydantic_extra_types.phone_numbers import PhoneNumber
-from pydantic import EmailStr
+from pydantic import EmailStr, ValidationError, HttpUrl
 from datetime import datetime
 
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field, Relationship, Column
 
 from ...utils.debugging import AutoStrRepr
+from ...utils.type import HttpUrlType
 
 
 class PasswordBase(SQLModel, AutoStrRepr):
     user_id: int = Field(foreign_key="user.id", description="Identifiant de l'utilisateur")
-    url: str = Field(regex=r'^https?://(?:www\.)?\w+\.\w+$', description="URL du site / service")
-    description: str | None = Field(description="Description par l'utilisateur du site / service")
+    url: HttpUrl = Field(sa_column=Column(HttpUrlType), description="URL du site / service")
+    description: str | None = Field(None, description="Description par l'utilisateur du site / service")
     key: str = Field(description="Clé / identifiant")
-    password_encrypted: str = Field(description="Mot de passe chiffré")
-    email: EmailStr | None = Field(description="Email associé")
-    phone: PhoneNumber | None = Field(description="Numéro de téléphone associé")
+    password_encrypted: str = Field(None, description="Mot de passe chiffré")
+    email: EmailStr | None = Field(None, description="Email associé")
+    phone: PhoneNumber | None = Field(None, description="Numéro de téléphone associé")
 
 class Password(PasswordBase, table=True):
     id: int = Field(default=None, primary_key=True , description="Identifiant de l'enregistrement d'informations de connection")
@@ -28,6 +29,13 @@ class Password(PasswordBase, table=True):
 
     # Relationship to the User model, setting up a one-to-many relationship
     user: "User" = Relationship(back_populates="passwords")
+
+    def __init__(self, **data):
+        try:
+            validated_data = PasswordBase.model_validate(data)
+            super().__init__(**validated_data.model_dump())
+        except ValidationError as e:
+            raise ValueError(f"Invalid data: {e}")
     
     def __str__(self):
         from ...utils.security import decrypt_password
@@ -45,7 +53,7 @@ class Password(PasswordBase, table=True):
                 f"Identifiant: {self.key}\n" \
                 f"Mot de passe: {decrypt_password(self.password_encrypted, user.encryption_key)}\n" \
                 f"Email: {self.email or 'Non spécifié'}\n" \
-                f"Téléphone: {self.phone or 'Non spécifié'}\n" \
+                f"Téléphone: {(self.phone or '    Non spécifié')[4:]}\n" \
                 f"Date de création: {self.date_added}\n" \
                 f"Date de dernière modification: {self.date_updated}"
 
