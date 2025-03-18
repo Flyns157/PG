@@ -4,7 +4,7 @@ Modèles de données pour les mots de passe
 """
 
 from pydantic_extra_types.phone_numbers import PhoneNumber
-from pydantic import EmailStr, HttpUrl
+from pydantic import EmailStr
 from datetime import datetime
 
 from sqlmodel import SQLModel, Field
@@ -14,15 +14,15 @@ from ...utils.debugging import AutoStrRepr
 
 class PasswordBase(SQLModel, AutoStrRepr):
     user_id: int = Field(foreign_key="user.id", description="Identifiant de l'utilisateur")
-    url: HttpUrl = Field(description="URL du site / service")
+    url: str = Field(regex=r'^https?://(?:www\.)?\w+\.\w+$', description="URL du site / service")
     description: str | None = Field(description="Description par l'utilisateur du site / service")
     key: str = Field(description="Clé / identifiant")
     password_encrypted: str = Field(description="Mot de passe chiffré")
     email: EmailStr | None = Field(description="Email associé")
     phone: PhoneNumber | None = Field(description="Numéro de téléphone associé")
 
-class Password(PasswordBase):
-    id: int | None = Field(..., description="Identifiant de l'enregistrement d'informations de connection")
+class Password(PasswordBase, table=True):
+    id: int = Field(default=None, primary_key=True , description="Identifiant de l'enregistrement d'informations de connection")
     date_added: datetime = Field(default_factory=datetime.now, description="Date de création du mot de passe")
     date_updated: datetime = Field(default_factory=datetime.now, description="Date de dernière modification du mot de passe")
     
