@@ -39,9 +39,9 @@ def main():
                     elif sub_choice == "4":
                         modify_password(user_id)
                     elif sub_choice == "5":
-                        export_passwords(user_id, key)
+                        export_passwords(user_id)
                     elif sub_choice == "6":
-                        import_csv(user_id, key)
+                        import_csv(user_id)
                     elif sub_choice == "7":
                         break
         elif choice == "3":
