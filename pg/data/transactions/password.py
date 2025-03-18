@@ -16,26 +16,25 @@ def save_password(user_id: int):
             print("Utilisateur inconnu.")
             return
 
-    url = input("Site web: ")
-    key = input("Identifiant du site: ")
-    password = getpass.getpass("Mot de passe: ")
-    email = input("Adresse e-mail (optionnel): ") or None
-    phone = input("Numéro de téléphone (optionnel): ") or None
-    clear_screen()
-
     try:
         with Session(engine) as session:
-            new_password = Password(
-                user_id=user_id,
-                url=url,
-                key=key,
-                password_encrypted=encrypt_password(
-                    password,
-                    user.encryption_key
-                ),
-                email=email,
-                phone=phone
-            )
+            try:
+                new_password = Password(
+                    user_id=user_id,
+                    url=input("Site web: "),
+                    description=input("Description (optionnel): ") or None,
+                    key=input("Identifiant du site: "),
+                    password_encrypted=encrypt_password(
+                        getpass.getpass("Mot de passe: "),
+                        user.encryption_key
+                    ),
+                    email=input("Adresse e-mail (optionnel): ") or None,
+                    phone=input("Numéro de téléphone (optionnel): ") or None
+                )
+            except Exception as e:
+                print(f"Une erreur est survenue: {e}")
+                return
+
             session.add(new_password)
             session.commit()
 
@@ -86,18 +85,22 @@ def modify_password(user_id: int):
             print("Aucun enregistrement trouvé pour ce site.")
             return
     
-    password = decrypt_password(password_to_update.password_encrypted, password_to_update.user.encryption_key)
+        password = decrypt_password(password_to_update.password_encrypted, password_to_update.user.encryption_key)
 
     print("Laissez un champ vide pour conserver les anciennes valeurs.\n")
-    password_updated = PasswordUpdate(
-        key=input(f"Nouvel identifiant (actuellement: {password_to_update.key} ): ") or None,
-        password_encrypted=encrypt_password(
-            getpass.getpass(f"Nouveau mot de passe (actuellement: {password} ): "),
-            password_to_update.user.encryption_key
-        ) or None,
-        email=input(f"Nouvel email (actuellement: {password_to_update.email} ") or None,
-        phone=input(f"Nouveau téléphone (actuellement: {password_to_update.phone} ): ") or None
-    )
+    try:
+        password_updated = PasswordUpdate(
+            key=input(f"Nouvel identifiant (actuellement: {password_to_update.key} ): ") or None,
+            password_encrypted=encrypt_password(
+                getpass.getpass(f"Nouveau mot de passe (actuellement: {password} ): "),
+                password_to_update.user.encryption_key
+            ) or None,
+            email=input(f"Nouvel email (actuellement: {password_to_update.email} ") or None,
+            phone=input(f"Nouveau téléphone (actuellement: {password_to_update.phone} ): ") or None
+        )
+    except Exception as e:
+        print(f"Une erreur est survenue: {e}")
+        return
     
     clear_screen()
     try:
