@@ -1,8 +1,8 @@
 # pg.data.database.py
 import sqlite3
-from typing import Callable
+from typing_extensions import deprecated
 
-@DeprecationWarning
+@deprecated("Use sqlmodel instead")
 def create_database():
     conn = sqlite3.connect("password_manager.db")
     cursor = conn.cursor()
@@ -32,6 +32,7 @@ def create_database():
 from sqlmodel import create_engine, Session, SQLModel
 from sqlmodel.orm.session import Select, _TSelectParam
 from sqlalchemy import Engine
+from typing import Callable
 
 
 engine = create_engine('sqlite:///password_manager.db')
@@ -42,7 +43,7 @@ class FetchMode(Enum):
     ALL = 1
     ONE = 2
 
-@DeprecationWarning
+@deprecated("Use the execute function instead or the query function with the fetch_mode parameter")
 def interact(statement: Select[_TSelectParam], engine: Engine = engine, session: Session | None = None, fetch_mode: FetchMode = FetchMode.ONE):
     if (must_be_closed := session is None):
         session = Session(engine)
