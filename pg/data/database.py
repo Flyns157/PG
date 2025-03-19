@@ -88,3 +88,16 @@ def update(orm_instance: SQLModel, engine: Engine = engine, session: Session | N
         func=request
     )
 
+def delete(orm_instance: SQLModel, engine: Engine = engine, session: Session | None = None):
+    if not is_table_model_class(orm_instance.__class__):
+        raise ValueError("Instance is not a SQLModel instance")
+    
+    def request(session: Session):
+        session.delete(orm_instance)
+        session.commit()
+
+    return execute(
+        engine=engine,
+        session=session,
+        func=request
+    )
