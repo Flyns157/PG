@@ -30,6 +30,7 @@ def create_database():
 
 
 from sqlmodel import create_engine, Session, SQLModel
+from sqlmodel.main import is_table_model_class
 from sqlmodel.orm.session import Select, _TSelectParam
 from sqlalchemy import Engine
 from typing import Callable
@@ -85,6 +86,9 @@ def query(statement: Select[_TSelectParam], engine: Engine = engine, session: Se
     )
 
 def insert(orm_instance: SQLModel, engine: Engine = engine, session: Session | None = None):
+    if not is_table_model_class(orm_instance.__class__):
+        raise ValueError("Instance is not a SQLModel instance")
+
     def request(session: Session):
         session.add(orm_instance)
         session.commit()
@@ -98,6 +102,9 @@ def insert(orm_instance: SQLModel, engine: Engine = engine, session: Session | N
     )
 
 def update(orm_instance: SQLModel, engine: Engine = engine, session: Session | None = None):
+    if not is_table_model_class(orm_instance.__class__):
+        raise ValueError("Instance is not a SQLModel instance")
+    
     def request(session: Session):
         session.add(orm_instance)
         session.commit()
