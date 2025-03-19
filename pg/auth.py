@@ -24,18 +24,13 @@ def register():
     clear_screen()
     display_supported_algorithms()
     algorithm = input("Algorithme de hachage (par défaut: sha256): ") or "sha256"
-    password_hash = hash_password(password, algorithm)
     
     try:
-        with Session(engine) as session:
-            new_user = User(
-                username=username, 
-                password_hash=password_hash,
-                hash_algorithm=algorithm
-            )
-            
-            session.add(new_user)
-            session.commit()
+        User.create(
+            username=username, 
+            password=password,
+            hash_algorithm=algorithm
+        )
 
         print("Utilisateur enregistré avec succès!")
     except Exception as e:
@@ -45,20 +40,12 @@ def register():
 def login():
     clear_screen()
     username = input("Nom d'utilisateur: ")
-    password = getpass.getpass("Mot de passe: ")
 
-    with Session(engine) as session:
-        statement = select(User).where(User.username == username)
-        user = session.exec(statement).first()
+    if (user := User.get_by_username(username)):
+        if user.verify_password(getpass.getpass("Mot de passe: ")):
+            clear_screen()
+            print("Connexion réussie!")
+            return user.id, user.encryption_key
 
-    if not user:
-        print("Utilisateur non trouvé.")
-        return None, None
-
-    if hash_password(password, user.hash_algorithm) != user.password_hash:
-        print("Mot de passe incorrect.")
-        return None, None
+    return None, None
     
-    clear_screen()
-    print("Connexion réussie!")
-    return user.id, user.encryption_key
