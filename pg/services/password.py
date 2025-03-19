@@ -1,26 +1,23 @@
 # pg.services.password.py
-import sqlite3
-
 from ..utils.visual import clear_screen
-from ..utils.security import decrypt_password
+from ..utils.search_engine import similar_passwords
 
+from ..data.database import engine
+from ..data.models import Password, User
 
-def search_password(user_id, key):
+from sqlmodel import Session, select
+
+def search_password(user_id):
     search_term = input("Entrez le site ou l'identifiant à rechercher: ")
-    conn = sqlite3.connect("password_manager.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT site, key, password, email, phone, date_added FROM passwords WHERE user_id = ? AND (site LIKE ? OR key LIKE ?)",
-                   (user_id, f"%{search_term}%", f"%{search_term}%"))
-    entries = cursor.fetchall()
-    conn.close()
-    
-    if not entries:
-        print("Aucun mot de passe trouvé pour cette recherche.")
-        return
-    
     clear_screen()
-    print(f"""\nListe des informations de connections correspondantes à la recherche\n\n-> Recherche: "{search_term}"\n""")
-    for entry in entries:
-        site, site_key, encrypted_password, email, phone, date = entry
-        password = decrypt_password(encrypted_password, key)
-        print(f"\nSite: {site}\nIdentifiant: {site_key}\nMot de passe: {password}\nE-mail: {email or 'Non spécifié'}\nTéléphone: {phone or 'Non spécifié'}\nDate d'ajout: {date}")
+
+    with Session(engine) as session:
+        user: User = session.exec(select(User).where(User.id == user_id)).first()
+        if not user:
+            print("Utilisateur inconnu.")
+            return
+
+        nearest_password=similar_passwords(user.passwords, search_term)[0]
+
+    print(f"""\nInformations de connections similaires à la recherche\n\n-> Recherche: "{search_term}"\n""")
+    print(nearest_password)

@@ -4,14 +4,14 @@ import sqlite3
 def create_database():
     conn = sqlite3.connect("password_manager.db")
     cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
+    cursor.execute('''CREATE TABLE IF NOT EXISTS user (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         username TEXT UNIQUE NOT NULL,
                         password_hash TEXT NOT NULL,
                         hash_algorithm TEXT NOT NULL,
                         encryption_key TEXT NOT NULL
                     )''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS passwords (
+    cursor.execute('''CREATE TABLE IF NOT EXISTS password (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         user_id INTEGER,
                         site TEXT NOT NULL,
@@ -25,3 +25,9 @@ def create_database():
                     )''')
     conn.commit()
     conn.close()
+
+
+from sqlmodel import create_engine
+
+
+engine = create_engine('sqlite:///password_manager.db')
