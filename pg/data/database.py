@@ -69,7 +69,7 @@ def execute(func: Callable, engine: Engine = engine, session: Session | None = N
         session.close()
     return result
 
-def query(statement: Select[_TSelectParam], engine: Engine = engine, session: Session | None = None, fetch_mode: FetchMode = FetchMode.ALL):
+def query(statement: Select[_TSelectParam], engine: Engine = engine, session: Session | None = None, fetch_mode: FetchMode = FetchMode.ONE):
     def request(session: Session):
         tmp=session.exec(statement)
         match fetch_mode:
@@ -89,6 +89,7 @@ def insert(orm_instance: SQLModel, engine: Engine = engine, session: Session | N
         session.add(orm_instance)
         session.commit()
         session.refresh(orm_instance)
+        orm_instance.__class__.model_validate(orm_instance)
 
     return execute(
         engine=engine,
