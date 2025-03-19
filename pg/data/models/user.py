@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from ...utils.security import generate_key, hash_password
 from ...utils.debugging import AutoStrRepr
 
-from ..database import engine, query, insert
+from ..database import engine, query, insert, delete
 
 
 class UserBase(SQLModel, AutoStrRepr):
@@ -70,23 +70,22 @@ class User(UserBase, table = True):
         )
     
     @staticmethod
-    def create(engine: Engine=engine, **data: "UserCreate") -> "User":
+    def create(engine: Engine=engine, session: Session|None=None, **data: "UserCreate") -> "User":
         """
         Crée un nouvel utilisateur dans la base de données
         """
         try:
             user_data = UserCreate.model_validate(data).model_dump()
             user_data["password_hash"] = hash_password(user_data.pop("password"), user_data["hash_algorithm"])
-            user = User(**user_data)
-            with Session(engine) as session:
-                session.add(user)
-                session.commit()
-                User.model_validate(user)
-            return user
+            return insert(
+                orm_instance=User(**user_data),
+                engine=engine,
+                session=session
+            )
         except ValidationError as e:
             raise ValueError(f"Invalid data: {e}")
         
-    def update(self, engine: Engine=engine, **data: "UserUpdate") -> "User":
+    def update(self, engine: Engine=engine, session: Session|None=None, **data: "UserUpdate") -> "User":
         """
         Met à jour les données de l'utilisateur
         """
@@ -95,10 +94,11 @@ class User(UserBase, table = True):
                 UserUpdate.model_validate(data)
                 for key, value in data.items():
                     setattr(self, key, value)
-                with Session(engine) as session:
-                    session.add(self)
-                    session.commit()
-                    return self
+                return insert(
+                    orm_instance=self,
+                    session=session,
+                    engine=engine
+                )
             except ValidationError as e:
                 raise ValueError(f"Invalid data: {e}")
     
@@ -112,13 +112,15 @@ class User(UserBase, table = True):
         else:
             raise ValueError(f"User with id {id} not found")
     
-    def delete(self, engine: Engine=engine):
+    def delete(self, engine: Engine=engine, session: Session|None=None):
         """
         Supprime l'utilisateur de la base de données
         """
-        with Session(engine) as session:
-            session.delete(self)
-            session.commit()
+        delete(
+            orm_instance=self,
+            session=session,
+            engine=engine
+        )
     
     @staticmethod
     def delete_by_id(id: int, engine: Engine=engine):
