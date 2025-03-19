@@ -7,10 +7,10 @@ from sqlmodel import SQLModel, Field, Relationship, Session, select
 from sqlalchemy import Engine
 from pydantic import ValidationError
 
-from ...utils.security import decrypt_password, generate_key, hash_password
+from ...utils.security import generate_key, hash_password
 from ...utils.debugging import AutoStrRepr
 
-from ..database import engine, interact
+from ..database import engine, query, insert
 
 
 class UserBase(SQLModel, AutoStrRepr):
@@ -52,7 +52,7 @@ class User(UserBase, table = True):
         """
         Retourne un utilisateur à partir de son identifiant
         """
-        return interact(
+        return query(
             engine=engine,
             session=session,
             statement = select(User).where(User.id == id)
@@ -63,7 +63,7 @@ class User(UserBase, table = True):
         """
         Retourne un utilisateur à partir de son nom d'utilisateur
         """
-        return interact(
+        return query(
             engine=engine,
             session=session,
             statement = select(User).where(User.username == username)
