@@ -40,8 +40,9 @@ class Password(PasswordBase, table=True):
         Retourne l'utilisateur complet (contournement de l'import paresseux depuis la base de données)
         """
         from ..models.user import User
-        if isinstance(self.user, User):  # Si l'utilisateur est déjà chargé, on le retourne directement
-            return self.user
+        # TODO : trouver une manière de vérifier si l'import est passeux
+        # if isinstance(self.user, User):  # Si l'utilisateur est déjà chargé, on le retourne directement
+        #     return self.user
         return User.get_by_id(self.user_id)
     
     @property
@@ -49,7 +50,7 @@ class Password(PasswordBase, table=True):
         """
         Retourne le mot de passe en clair
         """
-        return decrypt_password(self.password_hash, self.loaded_user.encryption_key)
+        return decrypt_password(self.password_encrypted, self.loaded_user.encryption_key)
     
     @password.setter
     def password(self, password: str):
