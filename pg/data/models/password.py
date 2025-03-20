@@ -159,8 +159,7 @@ class Password(PasswordBase, table=True):
         return password.delete(engine=engine)
     
     def __str__(self):
-        return f"\n" \
-                f"Site web: {self.url} (id: {self.id})\n" \
+        return  f"Site web: {self.url} (id: {self.id})\n" \
                 f"Description: {self.description or 'Non spécifié'}\n" \
                 f"Identifiant: {self.key}\n" \
                 f"Mot de passe: {self.password}\n" \
