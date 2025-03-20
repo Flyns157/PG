@@ -1,6 +1,8 @@
 # pg.services.csv.py
 import csv
 
+from typing_extensions import deprecated
+
 from ..utils.visual import clear_screen
 from ..utils.security import encrypt_password, decrypt_password
 
@@ -11,6 +13,7 @@ from sqlmodel import Session, select
 from datetime import datetime
 
 
+@deprecated("No longer used, use the new function provided in the password controller")
 def export_passwords(user_id):
     clear_screen()
 
@@ -32,6 +35,7 @@ def export_passwords(user_id):
     print("Exportation réussie dans passwords_export.csv")
 
 
+@deprecated("No longer used, use the new function provided in the password controller")
 def import_csv(user_id):
     file_path = input("Entrez le chemin du fichier CSV à importer: ")
     clear_screen()

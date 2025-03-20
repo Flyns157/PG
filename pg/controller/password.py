@@ -1,5 +1,7 @@
 # pg.controller.password.py
+import csv
 import getpass
+from datetime import datetime
 from sqlmodel import Session
 
 from ..utils.visual import clear_screen
@@ -103,6 +105,60 @@ def search_password(user: User):
     except Exception as e:
         print(f"Une erreur est survenue: {e}", end="\n\n")
 
-def export_passwords(user: User):...
+def export_passwords(user: User):
+    clear_screen()
+    try:
+        with Session(engine) as session:
+            user = User.get_by_id(user.id, session=session)
+            
+            with open("passwords_export.csv", "w", newline="", encoding="utf-8") as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames={*Password.__fields__.keys(), "password"} - {"id", "user_id", "password_encrypted"})
+                print("Exportation en cours...")
+                writer.writeheader()
+                for password in user.passwords:
+                    password_data: dict = password.model_dump(exclude=("id", "user_id", "password_encrypted"))
+                    password_data["password"] = password.password
+                    writer.writerow(password_data)
+    
+        print("Exportation réussie dans passwords_export.csv")
+    except Exception as e:
+        print(f"Une erreur est survenue: {e}", end="\n\n")
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
 
-def import_passwords(user: User):...
+def import_passwords(user: User):
+    file_path = input("Entrez le chemin du fichier CSV à importer: ")
+    clear_screen()
+    
+    with Session(engine) as session:
+        user = User.get_by_id(user.id, session=session)
+        if not user:
+            print("Utilisateur inconnu.")
+            return
+    
+        try:
+            with open(file_path, mode='r', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+
+                for record in reader:
+                    Password.create(
+                        session=session,
+                        user_id=user.id,
+                        url=record["url"],
+                        description=record["description"],
+                        key=record["key"],
+                        password=record["password"],
+                        email=record["email"],
+                        phone=record["phone"],
+                        # Convertion les chaînes de caractères en objets datetime (à cause du format ISO utilisé par le CSV)
+                        date_added=datetime.fromisoformat(record["date_added"]),
+                        date_updated=datetime.fromisoformat(record["date_updated"])
+                    )
+
+            clear_screen()
+            print("Importation réussie!")
+        except Exception as e:
+            print(f"Erreur lors de l'importation du fichier CSV: {e}")
