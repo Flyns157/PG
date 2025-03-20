@@ -116,7 +116,12 @@ def search_password(user: User):
         with Session(engine) as session:
             user = User.get_by_id(user.id, session=session)
             search_term = input("Terme de recherche: ")
-            nearest_url = similar_passwords(user.passwords, search_term)[0].url
+            listed_passwords = similar_passwords(user.passwords, search_term)
+            if not listed_passwords:
+                clear_screen()
+                print(f"Aucun mot de passe ne correspond à la recherche \"{search_term}\".", end="\n\n")
+                return
+            nearest_url = listed_passwords[0].url
             nearest_domaine_name=str(nearest_url).split("/")[2]
             statement = select(Password).where(Password.url.like(f'%{nearest_domaine_name}%') & Password.user_id == user.id)
             nearest_passwords = session.exec(statement).fetchall()
