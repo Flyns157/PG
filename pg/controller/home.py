@@ -10,6 +10,7 @@ from .password import (
 from ..utils.visual import clear_screen
 from ..data.models import User
 
+
 def home(user: User):
     clear_screen()
     while True:
@@ -20,7 +21,8 @@ def home(user: User):
         print("4. Rechercher un mot de passe")
         print("5. Modifier un mot de passe")
         print("6. Supprimer un mot de passe")
-        print("7. Quitter")
+        print("7. Déconnexion")
+        print("8. Quitter")
         choice = input("Entrez votre choix: ")
         match choice:
             case "1":
@@ -36,6 +38,10 @@ def home(user: User):
             case "6":
                 delete_password(user)
             case "7":
+                from .auth import connect
+                connect()
+            case "8":
+                clear_screen()
                 return
             case _:
                 print("Choix invalide")
