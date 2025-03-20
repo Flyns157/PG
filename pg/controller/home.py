@@ -54,4 +54,5 @@ def home(user: User):
                 clear_screen()
                 return
             case _:
+                clear_screen()
                 print("Choix invalide")
