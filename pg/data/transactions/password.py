@@ -1,4 +1,6 @@
 # pg.data.transactions.password.py
+from typing_extensions import deprecated
+
 import getpass
 
 from ...utils.security import encrypt_password, decrypt_password
@@ -8,7 +10,7 @@ from sqlmodel import Session, select
 from ..database import engine
 from ..models import Password, PasswordUpdate, User
 
-
+@deprecated("No longer used, use the new function provided in the password controller")
 def save_password(user_id: int):
     with Session(engine) as session:
         user: User = session.exec(select(User).where(User.id == user_id)).first()
@@ -42,6 +44,7 @@ def save_password(user_id: int):
     except Exception as e:
         print(f"Une erreur est survenue: {e}")
 
+@deprecated("No longer used, use the new function provided in the password controller")
 def delete_password(user_id: int):
     site = input("Site web à supprimer: ")
     clear_screen()
@@ -56,6 +59,7 @@ def delete_password(user_id: int):
         else:
             print("Aucun enregistrement trouvé pour ce site.")
 
+@deprecated("No longer used, use the new function provided in the password controller")
 def retrieve_passwords(user_id: int):
     with Session(engine) as session:
         statement = select(Password).where(Password.user_id == user_id)
@@ -70,6 +74,7 @@ def retrieve_passwords(user_id: int):
     for password in sorted(entries, key=lambda x: x.url):
         print(password)
 
+@deprecated("No longer used, use the new function provided in the password controller")
 def modify_password(user_id: int):
     clear_screen()
     enter = input("Site web à modifier (url ou id): ")
