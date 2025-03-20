@@ -103,12 +103,12 @@ class User(UserBase, table = True):
                 raise ValueError(f"Invalid data: {e}")
     
     @staticmethod
-    def update_by_id(id: int, engine: Engine=engine, **data):
+    def update_by_id(id: int, engine: Engine=engine, session: Session|None=None, **data: "UserUpdate"):
         """
         Met à jour les données d'un utilisateur à partir de son identifiant
         """
-        if (user := User.get_by_id(id, engine)):
-            user.update(engine, **data)
+        if (user := User.get_by_id(id, engine, session)):
+            user.update(engine, session, **data)
         else:
             raise ValueError(f"User with id {id} not found")
     
@@ -123,12 +123,12 @@ class User(UserBase, table = True):
         )
     
     @staticmethod
-    def delete_by_id(id: int, engine: Engine=engine):
+    def delete_by_id(id: int, engine: Engine=engine, session: Session|None=None):
         """
         Supprime un utilisateur à partir de son identifiant
         """
-        if (user := User.get_by_id(id, engine)):
-            user.delete(engine)
+        if (user := User.get_by_id(id, engine, session)):
+            user.delete(engine, session)
         else:
             raise ValueError(f"User with id {id} not found")
 
