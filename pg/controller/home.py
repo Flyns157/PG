@@ -11,8 +11,8 @@ from ..utils.visual import clear_screen
 from ..data.models import User
 
 def home(user: User):
+    clear_screen()
     while True:
-        clear_screen()
         print("Menu principal")
         print("1. Créer un mot de passe")
         print("2. Voir un mot de passe")

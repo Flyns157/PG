@@ -23,7 +23,7 @@ def create_password(user: User):
                 email=input("Adresse e-mail (optionnel): ") or None,
                 phone=input("Numéro de téléphone (optionnel): ") or None
             )
-
+            clear_screen()
             print("Mot de passe enregistré avec succès!")
     except Exception as e:
         print(f"Une erreur est survenue: {e}")
@@ -40,8 +40,10 @@ def view_password(user: User):
             password_id = input("ID du mot de passe à récupérer: ")
             password = Password.get_by_id(password_id, session=session)
             if password.user_id != user.id:
-                print("Ce mot de passe ne vous appartient pas.")
+                clear_screen()
+                print(f"Le mot de passe d'ID {password_id} ne vous appartient pas.")
                 return
+            clear_screen()
             print(password)
     except Exception as e:
         print(f"Une erreur est survenue: {e}")
@@ -65,7 +67,8 @@ def edit_password(user: User):
             password_id = input("ID du mot de passe à modifier: ")
             password = Password.get_by_id(password_id, session=session)
             if password.user_id != user.id:
-                print("Ce mot de passe ne vous appartient pas.")
+                clear_screen()
+                print(f"Le mot de passe d'ID {password_id} ne vous appartient pas.")
                 return
             password.update(
                 session=session,
@@ -94,6 +97,7 @@ def delete_password(user: User):
                 print("Ce mot de passe ne vous appartient pas.")
                 return
             password.delete(session=session)
+            clear_screen()
             print("Mot de passe supprimé avec succès!")
     except Exception as e:
         print(f"Une erreur est survenue: {e}")
