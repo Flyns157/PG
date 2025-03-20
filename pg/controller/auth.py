@@ -17,7 +17,7 @@ def connect():
             case "2":
                 login()
             case "3":
-                break
+                exit()
             case _:
                 clear_screen()
                 print("Option invalide.")
