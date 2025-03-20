@@ -17,6 +17,7 @@ def connect():
             case "2":
                 login()
             case "3":
+                clear_screen()
                 exit()
             case _:
                 clear_screen()
