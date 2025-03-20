@@ -1,4 +1,5 @@
 # pg.auth.py
+from typing_extensions import deprecated
 import getpass
 
 from .utils.visual import clear_screen, display_supported_algorithms
@@ -8,6 +9,7 @@ from sqlmodel import Session, select
 from .data.database import engine
 from .data.models import User
 
+@deprecated("No longer used, use the new function provided in the password controller")
 def register():
     clear_screen()
     username = input("Nom d'utilisateur: ")
@@ -37,6 +39,7 @@ def register():
         print(e)
         input("Appuyez sur entrée pour continuer...")
 
+@deprecated("No longer used, use the new function provided in the password controller")
 def login():
     clear_screen()
     username = input("Nom d'utilisateur: ")
