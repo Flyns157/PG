@@ -1,8 +1,7 @@
 # pg.controller.password.py
 import csv
 import getpass
-from datetime import datetime
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from ..utils.visual import clear_screen
 from ..utils.search_engine import similar_passwords
@@ -33,15 +32,20 @@ def create_password(user: User):
 def view_password(user: User):
     clear_screen()
     try:
-            password_id = input("ID du mot de passe à récupérer: ")
-            password = Password.get_by_id(password_id)
-            if password.user_id != user.id:
-                clear_screen()
-                print(f"Le mot de passe d'ID {password_id} ne vous appartient pas.", end="\n\n")
-                return
+        while not (password_id := input("ID du mot de passe à récupérer: ")).isnumeric():...
+        
+        password = Password.get_by_id(password_id)
+        if password is None:
             clear_screen()
-            print(f"-> Mot de passe d'ID {password_id}", end="\n\n")
-            print(password, end="\n\n")
+            print(f"Le mot de passe d'ID {password_id} n'existe pas.", end="\n\n")
+            return
+        if password.user_id != user.id:
+            clear_screen()
+            print(f"Le mot de passe d'ID {password_id} ne vous appartient pas.", end="\n\n")
+            return
+        clear_screen()
+        print(f">> Mot de passe d'ID {password_id}", end="\n\n")
+        print(password, end="\n\n")
     except Exception as e:
         print(f"Une erreur est survenue: {e}", end="\n\n")
 
@@ -59,6 +63,10 @@ def edit_password(user: User):
         with Session(engine) as session:
             password_id = input("ID du mot de passe à modifier: ")
             password = Password.get_by_id(password_id, session=session)
+            if password is None:
+                clear_screen()
+                print(f"Le mot de passe d'ID {password_id} n'existe pas.", end="\n\n")
+                return
             if password.user_id != user.id:
                 clear_screen()
                 print(f"Le mot de passe d'ID {password_id} ne vous appartient pas.", end="\n\n")
@@ -81,6 +89,10 @@ def delete_password(user: User):
         with Session(engine) as session:
             password_id = input("ID du mot de passe à supprimer: ")
             password = Password.get_by_id(password_id, session=session)
+            if password is None:
+                clear_screen()
+                print(f"Le mot de passe d'ID {password_id} n'existe pas.", end="\n\n")
+                return
             if password.user_id != user.id:
                 print(f"Le mot de passe d'ID {password_id} ne vous appartient pas.", end="\n\n")
                 return
@@ -98,14 +110,25 @@ def delete_password(user: User):
 def search_password(user: User):
     clear_screen()
     try:
-        user = User.get_by_id(user.id)
-        search_term = input("Terme de recherche: ")
-        nearest_password = similar_passwords(user.passwords, search_term)[0]
-        clear_screen()
-        print(f"""\nInformations de connections similaires à la recherche\n-> Recherche: "{search_term}"\n\n""")
-        print(nearest_password, end="\n\n")
-    except Exception as e:
+        with Session(engine) as session:
+            user = User.get_by_id(user.id, session=session)
+            search_term = input("Terme de recherche: ")
+            nearest_url = similar_passwords(user.passwords, search_term)[0].url
+            nearest_domaine_name=str(nearest_url).split("/")[2]
+            statement = select(Password).where(Password.url.like(f'%{nearest_domaine_name}%') & Password.user_id == user.id)
+            nearest_passwords = session.exec(statement).fetchall()
+
+            clear_screen()
+            print(f"""\nInformations de connections similaires à la recherche\n-> Recherche: "{search_term}"\n\n""")
+            for password in nearest_passwords:
+                print(password, end="\n\n")
+    except ValueError as e:
         print(f"Une erreur est survenue: {e}", end="\n\n")
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
 
 def export_passwords(user: User):
     clear_screen()

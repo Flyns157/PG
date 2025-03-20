@@ -57,7 +57,7 @@ class Password(PasswordBase, table=True):
         """
         Définit le mot de passe en clair
         """
-        self.password_hash = encrypt_password(password, self.loaded_user.encryption_key)
+        self.password_encrypted = encrypt_password(password, self.loaded_user.encryption_key)
     
     def refresh(self, engine: Engine=engine, session: Session=None):
         """

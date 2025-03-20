@@ -21,8 +21,8 @@ def create_user():
                 password=getpass.getpass("Mot de passe: "),
                 hash_algorithm=input(f"\nAlgorithme de hashage à utiliser\n-> {', '.join(supported_algorithms())}\n(optionnel): ") or "sha256"
             )
-            clear_screen()
-            print(f"Utilisateur {user.username} créé avec succès!")
+            # clear_screen()
+            # print(f"Utilisateur {user.username} créé avec succès!")
             home(user)
     except Exception as e:
         clear_screen()

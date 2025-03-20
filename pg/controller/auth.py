@@ -20,7 +20,7 @@ def connect():
                 break
             case _:
                 clear_screen()
-                print("Option invalide.\n")
+                print("Option invalide.")
 
 def login():
     clear_screen()

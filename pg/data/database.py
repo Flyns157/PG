@@ -65,7 +65,7 @@ def insert(orm_instance: SQLModel, engine: Engine = engine, session: Session | N
         session.add(orm_instance)
         session.commit()
         session.refresh(orm_instance)
-        orm_instance.__class__.model_validate(orm_instance)
+        return orm_instance.__class__.model_validate(orm_instance)
 
     return execute(
         engine=engine,
