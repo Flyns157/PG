@@ -18,7 +18,6 @@ def create_user():
             user = User.create(
                 session=session,
                 username=input("Nom d'utilisateur: "),
-                email=input("Adresse e-mail: "),
                 password=getpass.getpass("Mot de passe: "),
                 hash_algorithm=input(f"\nAlgorithme de hashage à utiliser\n-> {', '.join(supported_algorithms())}\n(optionnel): ") or "sha256"
             )
