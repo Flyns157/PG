@@ -25,6 +25,7 @@ def create_user():
             print(f"Utilisateur {user.username} créé avec succès!")
             home(user)
     except Exception as e:
+        clear_screen()
         print(f"Une erreur est survenue: {e}")
     finally:
         try:
