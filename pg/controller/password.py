@@ -9,7 +9,10 @@ from ..utils.search_engine import similar_passwords
 from ..data.database import engine
 from ..data.models import Password, User
 
-from ..services.password import import_passwords, export_passwords
+from ..services.password import (
+    import_passwords as import_passwords_service,
+    export_passwords as export_passwords_service
+)
 
 
 def create_password(user: User):
@@ -134,7 +137,7 @@ def export_passwords(user: User):
     clear_screen()
     try:
         file_path = input("Entrez le chemin du fichier CSV à exporter: ") or "passwords_export.csv"
-        export_passwords(user, file_path)
+        export_passwords_service(user, file_path)
 
         clear_screen()
         print("Exportation réussie dans passwords_export.csv", end="\n\n")
@@ -145,7 +148,7 @@ def import_passwords(user: User):
     file_path = input("Entrez le chemin du fichier CSV à importer: ")
     clear_screen()
     try:
-        import_passwords(user, file_path)
+        import_passwords_service(user, file_path)
 
         clear_screen()
         print("Importation réussie!", end="\n\n")

@@ -37,17 +37,17 @@ def import_passwords(user: User, file_path: str | Path, session: Session=None) -
                 session=session,
                 user_id=user.id,
                 url=record["url"],
-                description=record["description"],
+                description=record["description"] or None,
                 key=record["key"],
                 password=record["password"],
-                email=record["email"],
-                phone=record["phone"],
+                email=record["email"] or None,
+                phone=record["phone"] or None,
                 # Convertion les chaînes de caractères en objets datetime (à cause du format ISO utilisé par le CSV)
                 date_added=datetime.fromisoformat(record["date_added"]),
                 date_updated=datetime.fromisoformat(record["date_updated"])
             )
 
-def export_passwords(user: User, file_path: str | Path, session: Session=None) -> None:
+def export_passwords(user: User, file_path: str | Path, session: Session) -> None:
     user = User.get_by_id(user.id, session=session)
     
     with open(file_path, "w", newline="", encoding="utf-8") as csvfile:
