@@ -76,6 +76,8 @@ class User(UserBase, table = True):
         """
         try:
             user_data = UserCreate.model_validate(data).model_dump()
+            if User.get_by_username(user_data["username"], engine, session):
+                raise ValueError(f"Username {user_data['username']} already exists")
             user_data["password_hash"] = hash_password(user_data.pop("password"), user_data["hash_algorithm"])
             return insert(
                 orm_instance=User(**user_data),
