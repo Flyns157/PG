@@ -14,7 +14,7 @@ from ...utils.debugging import AutoStrRepr
 from ...utils.type import HttpUrlType
 from ...utils.security import encrypt_password, decrypt_password
 
-from ..database import engine, execute
+from ..database import engine, query, insert, delete
 
 
 class PasswordBase(SQLModel, AutoStrRepr):
@@ -57,6 +57,105 @@ class Password(PasswordBase, table=True):
         Définit le mot de passe en clair
         """
         self.password_hash = encrypt_password(password, self.loaded_user.encryption_key)
+    
+    def refresh(self, engine: Engine=engine, session: Session=None):
+        """
+        Rafraîchit les données de l'utilisateur à partir de la base de données
+        """
+        if not session:
+            with Session(engine) as session:
+                session.refresh(self)
+        else:
+            session.refresh(self)
+
+    @staticmethod
+    def get_by_id(id: int, engine: Engine=engine, session: Session|None=None) -> "Password":
+        """
+        Retourne un mot de passe à partir de son identifiant
+        """
+        return query(
+            engine=engine,
+            session=session,
+            statement = select(Password).where(Password.id == id)
+        )
+    
+    @staticmethod
+    def get_by_url(url: str | HttpUrl, engine: Engine=engine, session: Session|None=None) -> "Password":
+        """
+        Retourne un mot de passe à partir de l'URL du site / service
+        """
+        return query(
+            engine=engine,
+            session=session,
+            statement = select(
+                Password
+            ).where(
+                # TODO : prendre en compte l'utilisateur...
+                # (Password.user_id == user_id) &
+                ((Password.url.contains(url)) | (Password.key.contains(url)))
+            )
+        )
+    
+    @staticmethod
+    def create(engine: Engine=engine, session: Session|None=None, **data: "PasswordCreate") -> "Password":
+        """
+        Crée un nouveau mot de passe
+        """
+        try:
+            password = Password(**data)
+            password.password = data.get("password")
+            return insert(
+                engine=engine,
+                session=session,
+                orm_instance=password
+            )
+        except ValidationError as e:
+            raise ValueError(str(e))
+    
+    def update(self, engine: Engine=engine, session: Session|None=None, **data: "PasswordUpdate") -> "Password":
+        """
+        Met à jour un mot de passe existant
+        """
+        try:
+            PasswordUpdate.model_validate(**data)
+            for key, value in data.items():
+                if key == "password":
+                    self.password = value
+                else:
+                    setattr(self, key, value)
+            return insert(
+                engine=engine,
+                session=session,
+                orm_instance=self
+            )
+        except ValidationError as e:
+            raise ValueError(str(e))
+    
+    @staticmethod
+    def update_by_id(id: int, engine: Engine=engine, session: Session|None=None, **data: "PasswordUpdate") -> "Password":
+        """
+        Met à jour un mot de passe existant à partir de son identifiant
+        """
+        password = Password.get_by_id(id, engine=engine)
+        return password.update(engine=engine, session=session, **data)
+    
+    def delete(self, engine: Engine=engine, session: Session|None=None):
+        """
+        Supprime un mot de passe
+        """
+        return delete(
+            orm_instance=self,
+            engine=engine,
+            session=session
+        )
+    
+    @staticmethod
+    def delete_by_id(id: int, engine: Engine=engine, session: Session|None=None):
+        """
+        Supprime un mot de passe à partir de son identifiant
+        """
+        password = Password.get_by_id(id=id, engine=engine, session=session)
+        return password.delete(engine=engine)
     
     def __str__(self):
         return f"\n" \
