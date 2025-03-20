@@ -1,4 +1,6 @@
 # pg.__init__.py
+from typing_extensions import deprecated
+
 from .utils.visual import clear_screen
 from .data.database import engine
 from .auth import register, login
@@ -8,6 +10,8 @@ from .services.password import search_password
 
 from .data.models import *
 
+from .controller.auth import connect
+
 from sqlmodel import SQLModel
 
 def init():
@@ -15,6 +19,7 @@ def init():
     print("Bienvenue dans Password Gestion!")
     SQLModel.metadata.create_all(engine)
 
+@deprecated("No longer supported, use the run_app function")
 def main():
     init()
     while True:
@@ -46,3 +51,7 @@ def main():
                         break
         elif choice == "3":
             break
+
+def run_app():
+    init()
+    connect()
