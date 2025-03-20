@@ -1,9 +1,10 @@
 # pg.controller.password.py
 import getpass
+from sqlmodel import Session
 
 from ..utils.visual import clear_screen
+from ..utils.search_engine import similar_passwords
 
-from sqlmodel import Session
 from ..data.database import engine
 from ..data.models import Password, User
 
@@ -90,6 +91,24 @@ def delete_password(user_id: int):
             password = Password.get_by_id(password_id, session=session)
             password.delete(session=session)
             print("Mot de passe supprimé avec succès!")
+        except Exception as e:
+            print(f"Une erreur est survenue: {e}")
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+def search_password(user_id: int):
+    clear_screen()
+    with Session(engine) as session:
+        try:
+            user=User.get_by_id(user_id, session=session)
+            search_term = input("Terme de recherche: ")
+            nearest_password = similar_passwords(user.passwords, search_term)[0]
+            clear_screen()
+            print(f"""\nInformations de connections similaires à la recherche\n\n-> Recherche: "{search_term}"\n""")
+            print(nearest_password)
         except Exception as e:
             print(f"Une erreur est survenue: {e}")
         finally:
