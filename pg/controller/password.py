@@ -1,6 +1,6 @@
 # pg.controller.password.py
-import csv
 import getpass
+from pathlib import Path
 from sqlmodel import Session, select
 
 from ..utils.visual import clear_screen
@@ -136,18 +136,28 @@ def search_password(user: User):
 def export_passwords(user: User):
     clear_screen()
     try:
-        file_path = input("Entrez le chemin du fichier CSV à exporter: ") or "passwords_export.csv"
-        export_passwords_service(user, file_path)
+        file_path = Path(input("""Entrez le chemin du fichier CSV à exporter ("passwords_export.csv" par défaut): """) or r"passwords_export.csv")
+        with Session(engine) as session:
+            export_passwords_service(
+                session=session,
+                user=user,
+                file_path=file_path
+            )
 
         clear_screen()
-        print("Exportation réussie dans passwords_export.csv", end="\n\n")
+        print(f"Exportation réussie dans {file_path}", end="\n\n")
     except Exception as e:
         print(f"Erreur lors de l'exportation des mots de passes: {e}", end="\n\n")
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
 
 def import_passwords(user: User):
-    file_path = input("Entrez le chemin du fichier CSV à importer: ")
     clear_screen()
     try:
+        file_path = Path(input("Entrez le chemin du fichier CSV à importer: ") or r"passwords_export.csv")
         import_passwords_service(user, file_path)
 
         clear_screen()
