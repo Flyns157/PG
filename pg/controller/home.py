@@ -5,7 +5,9 @@ from .password import (
     list_passwords,
     edit_password,
     delete_password,
-    search_password
+    search_password,
+    import_passwords,
+    export_passwords
 )
 from ..utils.visual import clear_screen
 from ..data.models import User
@@ -14,16 +16,20 @@ from ..data.models import User
 def home(user: User):
     clear_screen()
     while True:
-        print("Menu principal")
-        print("1. Créer un mot de passe")
-        print("2. Voir un mot de passe")
-        print("3. Lister les mots de passe")
-        print("4. Rechercher un mot de passe")
-        print("5. Modifier un mot de passe")
-        print("6. Supprimer un mot de passe")
-        print("7. Déconnexion")
-        print("8. Quitter")
-        choice = input("Entrez votre choix: ")
+        choice = input(
+            "Menu principal\n"\
+            "\n1. Créer un mot de passe\n"\
+            "2. Voir un mot de passe\n"\
+            "3. Lister les mots de passe\n"\
+            "4. Rechercher un mot de passe\n"\
+            "5. Modifier un mot de passe\n"\
+            "6. Supprimer un mot de passe\n"\
+            "7. Exporter les mots de passe\n"\
+            "8. Importer des mots de passe\n"\
+            "9. Déconnexion\n"\
+            "10. Quitter\n"\
+            "\nEntrez votre choix: "
+        )
         match choice:
             case "1":
                 create_password(user)
@@ -38,9 +44,13 @@ def home(user: User):
             case "6":
                 delete_password(user)
             case "7":
+                export_passwords(user)
+            case "8":
+                import_passwords(user)
+            case "9":
                 from .auth import connect
                 connect()
-            case "8":
+            case "10":
                 clear_screen()
                 return
             case _:
