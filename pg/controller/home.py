@@ -8,8 +8,9 @@ from .password import (
     search_password
 )
 from ..utils.visual import clear_screen
+from ..data.models import User
 
-def home(user_id: int):
+def home(user: User):
     while True:
         clear_screen()
         print("Menu principal")
@@ -23,17 +24,17 @@ def home(user_id: int):
         choice = input("Entrez votre choix: ")
         match choice:
             case "1":
-                create_password(user_id)
+                create_password(user)
             case "2":
-                view_password(user_id)
+                view_password(user)
             case "3":
-                list_passwords(user_id)
+                list_passwords(user)
             case "4":
-                search_password(user_id)
+                search_password(user)
             case "5":
-                edit_password(user_id)
+                edit_password(user)
             case "6":
-                delete_password(user_id)
+                delete_password(user)
             case "7":
                 return
             case _:

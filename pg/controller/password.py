@@ -9,14 +9,13 @@ from ..data.database import engine
 from ..data.models import Password, User
 
 
-def create_password(user_id: int):
+def create_password(user: User):
     clear_screen()
-    with Session(engine) as session:
-        try:
-            User.get_by_id(user_id, session=session)
+    try:
+        with Session(engine) as session:
             Password.create(
                 session=session,
-                user_id=user_id,
+                user_id=user.id,
                 url=input("Site web: "),
                 description=input("Description (optionnel): ") or None,
                 key=input("Identifiant du site: "),
@@ -26,45 +25,48 @@ def create_password(user_id: int):
             )
 
             print("Mot de passe enregistré avec succès!")
-        except Exception as e:
-            print(f"Une erreur est survenue: {e}")
-        finally:
-            try:
-                session.close()
-            except Exception:
-                pass
-
-def view_password(user_id: int):
-    clear_screen()
-    with Session(engine) as session:
+    except Exception as e:
+        print(f"Une erreur est survenue: {e}")
+    finally:
         try:
-            User.get_by_id(user_id, session=session)
+            session.close()
+        except Exception:
+            pass
+
+def view_password(user: User):
+    clear_screen()
+    try:
+        with Session(engine) as session:
             password_id = input("ID du mot de passe à récupérer: ")
             password = Password.get_by_id(password_id, session=session)
+            if password.user_id != user.id:
+                print("Ce mot de passe ne vous appartient pas.")
+                return
             print(password)
-        except Exception as e:
-            print(f"Une erreur est survenue: {e}")
-        finally:
-            try:
-                session.close()
-            except Exception:
-                pass
+    except Exception as e:
+        print(f"Une erreur est survenue: {e}")
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
 
-def list_passwords(user_id: int, filtre=lambda x: x.url):
+def list_passwords(user: User, filtre=lambda x: x.url):
     clear_screen()
     with Session(engine) as session:
-        user = User.get_by_id(user_id, session=session)
         print("Liste des mots de passe enregistrés:")
         for password in sorted(user.passwords, key=filtre):
             print(password)
 
-def edit_password(user_id: int):
+def edit_password(user: User):
     clear_screen()
-    with Session(engine) as session:
-        try:
-            User.get_by_id(user_id, session=session)
+    try:
+        with Session(engine) as session:
             password_id = input("ID du mot de passe à modifier: ")
             password = Password.get_by_id(password_id, session=session)
+            if password.user_id != user.id:
+                print("Ce mot de passe ne vous appartient pas.")
+                return
             password.update(
                 session=session,
                 description=input("Nouvelle description (optionnel): ") or None,
@@ -74,45 +76,46 @@ def edit_password(user_id: int):
                 phone=input("Nouveau numéro de téléphone (optionnel): ") or None
             )
             print("Mot de passe modifié avec succès!")
-        except Exception as e:
-            print(f"Une erreur est survenue: {e}")
-        finally:
-            try:
-                session.close()
-            except Exception:
-                pass
-
-def delete_password(user_id: int):
-    clear_screen()
-    with Session(engine) as session:
+    except Exception as e:
+        print(f"Une erreur est survenue: {e}")
+    finally:
         try:
-            User.get_by_id(user_id, session=session)
+            session.close()
+        except Exception:
+            pass
+
+def delete_password(user: User):
+    clear_screen()
+    try:
+        with Session(engine) as session:
             password_id = input("ID du mot de passe à supprimer: ")
             password = Password.get_by_id(password_id, session=session)
+            if password.user_id != user.id:
+                print("Ce mot de passe ne vous appartient pas.")
+                return
             password.delete(session=session)
             print("Mot de passe supprimé avec succès!")
-        except Exception as e:
-            print(f"Une erreur est survenue: {e}")
-        finally:
-            try:
-                session.close()
-            except Exception:
-                pass
-
-def search_password(user_id: int):
-    clear_screen()
-    with Session(engine) as session:
+    except Exception as e:
+        print(f"Une erreur est survenue: {e}")
+    finally:
         try:
-            user=User.get_by_id(user_id, session=session)
+            session.close()
+        except Exception:
+            pass
+
+def search_password(user: User):
+    clear_screen()
+    try:
+        with Session(engine) as session:
             search_term = input("Terme de recherche: ")
             nearest_password = similar_passwords(user.passwords, search_term)[0]
             clear_screen()
             print(f"""\nInformations de connections similaires à la recherche\n\n-> Recherche: "{search_term}"\n""")
             print(nearest_password)
-        except Exception as e:
-            print(f"Une erreur est survenue: {e}")
-        finally:
-            try:
-                session.close()
-            except Exception:
-                pass
+    except Exception as e:
+        print(f"Une erreur est survenue: {e}")
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
