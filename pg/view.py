@@ -1,7 +1,9 @@
 from tkinter import ttk, messagebox
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from .data.models import User
+from .utils.search_engine import similar_passwords
+
+from .data.models import User, Password
 from .data.database import engine
 
 class PasswordGestionApp:
@@ -98,7 +100,7 @@ class PasswordGestionApp:
         with Session(engine) as session:
             user = User.get_by_id(user.id, session=session)
             for pwd in user.passwords:
-                tmp=(
+                self.tree.insert("", "end", values=(
                     pwd.url, 
                     pwd.key, 
                     pwd.password,
@@ -106,23 +108,44 @@ class PasswordGestionApp:
                     pwd.phone,
                     pwd.date_added or 'Non spécifié',
                     pwd.date_updated or 'Non spécifié'
-                )
-                with open(r'./test.log', "w") as f: 
-                    f.write(str(tmp))
-                self.tree.insert("", "end", values=tmp)
+                ))
     
     def filter_passwords(self, user: User):
-        query = self.search_entry.get().strip().lower()
+        search_term = self.search_entry.get().strip()
         for row in self.tree.get_children():
             self.tree.delete(row)
         
-        with Session(engine) as session:
-            user = User.get_by_id(user.id, session=session)
-            filtered = [pwd for pwd in user.passwords if query in str(pwd.id) or query in pwd.name.lower()]
-            
-            for pwd in filtered:
-                self.tree.insert("", "end", values=(pwd.id, pwd.name, pwd.password))
-    
+
+        try:
+            with Session(engine) as session:
+                user = User.get_by_id(user.id, session=session)
+                listed_passwords = similar_passwords(user.passwords, search_term)
+                if not listed_passwords:
+                    messagebox.showinfo("Aucun résultat", f"Aucun mot de passe ne correspond à la recherche \"{search_term}\".")
+                    return
+                nearest_url = listed_passwords[0].url
+                nearest_domaine_name=str(nearest_url).split("/")[2]
+                statement = select(Password).where(Password.url.like(f'%{nearest_domaine_name}%') & Password.user_id == user.id)
+                nearest_passwords = session.exec(statement).fetchall()
+
+                for pwd in nearest_passwords:
+                    self.tree.insert("", "end", values=(
+                    pwd.url, 
+                    pwd.key, 
+                    pwd.password,
+                    pwd.email,
+                    pwd.phone,
+                    pwd.date_added or 'Non spécifié',
+                    pwd.date_updated or 'Non spécifié'
+                ))
+        except ValueError as e:
+            messagebox.showerror("Erreur", f"Une erreur est survenue: {e}")
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
+
     def clear_screen(self):
         for widget in self.root.winfo_children():
             widget.destroy()
