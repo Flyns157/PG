@@ -1,5 +1,5 @@
 # pg.__main__.py
-from pg import main
+from pg import run_app
 
 if __name__ == "__main__":
-    main()
+    run_app()

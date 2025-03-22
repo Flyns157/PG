@@ -7,6 +7,7 @@ import hashlib
 import base64
 import string
 import os
+import re
 from cryptography.fernet import Fernet
 
 
@@ -108,4 +109,11 @@ def validate_password_strength(password: str) -> str:
         raise ValueError('Le mot de passe doit contenir au moins un chiffre')
     if not any(c in string.punctuation for c in password):
         raise ValueError('Le mot de passe doit contenir au moins un caractère spécial')
+    return password
+
+
+def is_password_strenghtfull(password: str) -> str:
+    pattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$'
+    if not re.fullmatch(pattern, password):
+        raise ValueError("Le mot de passe ne respecte pas les critères de sécurité.")
     return password
