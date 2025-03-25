@@ -115,3 +115,49 @@ def create_add_password_window(root: Tk, user: User, tree):
     
     Button(add_window, text="Enregistrer", command=save_password).pack(pady=10)
     Button(add_window, text="Annuler", command=add_window.destroy).pack()
+
+def create_edit_password_window(root: Tk, user: User, tree):
+    selected_item = tree.selection()
+    if not selected_item:
+        messagebox.showwarning("Avertissement", "Veuillez sélectionner un mot de passe à modifier.")
+        return
+    
+    password_id = tree.item(selected_item, "values")[0]
+    password = Password.get_by_id(password_id)
+    if password is None or password.user_id != user.id:
+        messagebox.showerror("Erreur", "Mot de passe introuvable ou non autorisé.")
+        return
+    
+    edit_window = Toplevel(root)
+    edit_window.title("Modifier un mot de passe")
+    edit_window.geometry("400x400")
+    
+    Label(edit_window, text="Nouvelle description:").pack()
+    description_text = Text(edit_window, height=4, width=40)
+    description_text.insert("1.0", password.description or "")
+    description_text.pack()
+    
+    Label(edit_window, text="Nouvelle clé:").pack()
+    key_entry = Entry(edit_window)
+    key_entry.insert(0, password.key)
+    key_entry.pack()
+    
+    Label(edit_window, text="Nouveau mot de passe:").pack()
+    password_entry = Entry(edit_window, show="*")
+    password_entry.pack()
+    
+    def update_password():
+        try:
+            password.update(
+                description=description_text.get("1.0", "end").strip() or None,
+                key=key_entry.get(),
+                password=password_entry.get() or None
+            )
+            messagebox.showinfo("Succès", "Mot de passe modifié avec succès")
+            edit_window.destroy()
+            load_passwords(user=user, tree=tree, limit=10000)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Une erreur est survenue: {e}")
+    
+    Button(edit_window, text="Enregistrer", command=update_password).pack(pady=10)
+    Button(edit_window, text="Annuler", command=edit_window.destroy).pack()
