@@ -9,7 +9,7 @@ from .data.database import engine
 from .data.models import *
 
 from .controller.auth import connect
-from .view import PasswordGestionApp
+from .view.auth import create_login_screen
 
 
 def init():
@@ -28,7 +28,7 @@ def run_app(mode: Mode = Mode.GUI):
 
 def run_gui():
     root = tk.Tk()
-    app = PasswordGestionApp(root)
+    create_login_screen(root)
     root.mainloop()
 
 def run_console():

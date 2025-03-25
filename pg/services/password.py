@@ -1,8 +1,9 @@
 # pg.services.password.py
+import csv
 from pathlib import Path
 from datetime import datetime
-import csv
 from sqlmodel import Session
+from fuzzywuzzy import process
 
 from ..data.models import User, Password
 
@@ -36,3 +37,16 @@ def export_passwords(user: User, file_path: str | Path, session: Session) -> Non
             password_data: dict = password.model_dump(exclude=("id", "user_id", "password_encrypted"))
             password_data["password"] = password.password
             writer.writerow(password_data)
+
+def similar_passwords(user: User, session: Session, query: str, limit: int=10) -> list[Password]:
+    user = User.get_by_id(user.id, session=session)
+
+    # Trouver les correspondances avec leurs scores
+    correspondances = process.extract(query=query, choices=[pwd.url for pwd in user.passwords], limit=limit)
+
+    # Trier les objets en fonction des scores
+    return sorted(
+        user.passwords,
+        key=lambda obj: next(score for url, score in correspondances if url == obj.url),
+        reverse=True
+    )
