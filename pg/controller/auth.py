@@ -12,10 +12,10 @@ def connect():
         choice = input("Choisissez une option: ")
         match choice:
             case "1":
-                from .user import create_user
-                create_user()
+                from .user import console_create_user
+                console_create_user()
             case "2":
-                login()
+                consol_login()
             case "3":
                 clear_screen()
                 exit()
@@ -23,7 +23,7 @@ def connect():
                 clear_screen()
                 print("Option invalide.")
 
-def login():
+def consol_login():
     clear_screen()
     username = input("Nom d'utilisateur: ")
 
@@ -33,3 +33,9 @@ def login():
             print("Connexion réussie!")
             from .home import home
             home(user)
+
+def login(username: str, password: str) -> User|None:
+    if (user := User.get_by_username(username)):
+        if user.verify_password(password):
+            return user
+    return None

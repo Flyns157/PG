@@ -11,7 +11,7 @@ from ..data.models import User
 from .home import home
 
 
-def create_user():
+def console_create_user():
     clear_screen()
     try:
         with Session(engine) as session:
@@ -32,3 +32,10 @@ def create_user():
             session.close()
         except Exception:
             pass
+
+def create_user(username: str, password: str, hash_algorithm: str = "sha256") -> User|None:
+    return User.create(
+        username=username,
+        password=password,
+        hash_algorithm=hash_algorithm
+    )
