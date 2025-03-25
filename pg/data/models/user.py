@@ -7,7 +7,7 @@ from sqlmodel import SQLModel, Field, Relationship, Session, select
 from sqlalchemy import Engine
 from pydantic import ValidationError
 
-from ...utils.security import generate_key, hash_password
+from ...utils.security import generate_key, hash_password, supported_algorithms
 from ...utils.debugging import AutoStrRepr
 
 from ..database import engine, query, insert, delete
@@ -78,6 +78,8 @@ class User(UserBase, table = True):
             user_data = UserCreate.model_validate(data).model_dump()
             if User.get_by_username(user_data["username"], engine, session):
                 raise ValueError(f"Username {user_data['username']} already exists")
+            if data["hash_algorithm"] not in supported_algorithms():
+                raise ValueError(f"Hash algorithm {data['hash_algorithm']} is not supported")
             user_data["password_hash"] = hash_password(user_data.pop("password"), user_data["hash_algorithm"])
             return insert(
                 orm_instance=User(**user_data),
