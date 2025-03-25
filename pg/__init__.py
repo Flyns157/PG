@@ -11,6 +11,8 @@ from .data.models import *
 from .controller.auth import connect
 from .view.auth import create_login_screen
 
+__version__ = "3.14"
+
 
 def init():
     SQLModel.metadata.create_all(engine)
