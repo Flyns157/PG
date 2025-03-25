@@ -20,8 +20,45 @@ def add_password_tree(root: Tk) -> Treeview:
     for col in COLUMNS:
         tree.heading(col, text=col)
     tree.pack(pady=10, fill="both", expand=True)
+
+    tree.tag_configure("description", foreground="gray", font=("Arial", 10, "italic"))
+    tree.bind("<<TreeviewSelect>>", lambda event: update_description(tree))
     return tree
 
+def update_description(tree: Treeview):
+    selected_item = tree.selection()
+    if not selected_item:
+        return
+    
+    item_id = selected_item[0]
+    item_values = tree.item(item_id, "values")
+
+    if not item_values or len(item_values) == 0:
+        return
+    
+    password_id = item_values[0]
+    if not password_id:
+        return
+    
+    password = Password.get_by_id(password_id) 
+
+    if password is None:
+        messagebox.showerror("Erreur", "Impossible de récupérer les détails du mot de passe.")
+        return
+
+    # Supprimer toute ligne de description existante
+    for child in tree.get_children():
+        if tree.item(child, "tags") == ("description",):
+            tree.delete(child)
+
+    description_text = password.description if password.description else "Aucune description disponible"
+
+    tree.insert(
+        "", 
+        tree.index(item_id) + 1,  # Position après l'élément sélectionné
+        values=("", description_text),  # Première colonne vide pour alignement
+        tags=("description",)  # Tag pour identifier la ligne
+    )
 
 def load_passwords(tree: Treeview, user: User, query: str=None, limit: int=15, decrypted_passwords: bool=False):
     for row in tree.get_children():
