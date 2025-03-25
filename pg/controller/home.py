@@ -1,13 +1,13 @@
 # pg.controller.home.py
 from .password import (
-    create_password,
-    view_password,
-    list_passwords,
-    edit_password,
-    delete_password,
-    search_password,
-    import_passwords,
-    export_passwords
+    console_create_password,
+    console_view_password,
+    console_list_passwords,
+    console_edit_password,
+    console_delete_password,
+    console_search_password,
+    console_import_passwords,
+    console_export_passwords
 )
 from ..utils.visual import clear_screen
 from ..data.models import User
@@ -32,21 +32,21 @@ def home(user: User):
         )
         match choice:
             case "1":
-                create_password(user)
+                console_create_password(user)
             case "2":
-                view_password(user)
+                console_view_password(user)
             case "3":
-                list_passwords(user)
+                console_list_passwords(user)
             case "4":
-                search_password(user)
+                console_search_password(user)
             case "5":
-                edit_password(user)
+                console_edit_password(user)
             case "6":
-                delete_password(user)
+                console_delete_password(user)
             case "7":
-                export_passwords(user)
+                console_export_passwords(user)
             case "8":
-                import_passwords(user)
+                console_import_passwords(user)
             case "9":
                 from .auth import connect
                 connect()

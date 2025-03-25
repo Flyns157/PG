@@ -15,7 +15,7 @@ from ..services.password import (
 )
 
 
-def create_password(user: User):
+def console_create_password(user: User):
     clear_screen()
     try:
         Password.create(
@@ -32,7 +32,7 @@ def create_password(user: User):
     except Exception as e:
         print(f"Une erreur est survenue: {e}", end="\n\n")
 
-def view_password(user: User):
+def console_view_password(user: User):
     clear_screen()
     try:
         while not (password_id := input("ID du mot de passe à récupérer: ")).isnumeric():...
@@ -52,7 +52,7 @@ def view_password(user: User):
     except Exception as e:
         print(f"Une erreur est survenue: {e}", end="\n\n")
 
-def list_passwords(user: User, filtre=lambda x: x.url):
+def console_list_passwords(user: User, filtre=lambda x: x.url):
     clear_screen()
     with Session(engine) as session:
         user = User.get_by_id(user.id, session=session)
@@ -60,7 +60,7 @@ def list_passwords(user: User, filtre=lambda x: x.url):
         for password in sorted(user.passwords, key=filtre):
             print(password, end="\n\n")
 
-def edit_password(user: User):
+def console_edit_password(user: User):
     clear_screen()
     try:
         with Session(engine) as session:
@@ -86,7 +86,7 @@ def edit_password(user: User):
     except Exception as e:
         print(f"Une erreur est survenue: {e}", end="\n\n")
 
-def delete_password(user: User):
+def console_delete_password(user: User):
     clear_screen()
     try:
         with Session(engine) as session:
@@ -110,7 +110,7 @@ def delete_password(user: User):
         except Exception:
             pass
 
-def search_password(user: User):
+def console_search_password(user: User):
     clear_screen()
     try:
         with Session(engine) as session:
@@ -138,7 +138,7 @@ def search_password(user: User):
         except Exception:
             pass
 
-def export_passwords(user: User):
+def console_export_passwords(user: User):
     clear_screen()
     try:
         file_path = Path(input("""Entrez le chemin du fichier CSV à exporter ("passwords_export.csv" par défaut): """) or r"passwords_export.csv")
@@ -159,7 +159,7 @@ def export_passwords(user: User):
         except Exception:
             pass
 
-def import_passwords(user: User):
+def console_import_passwords(user: User):
     clear_screen()
     try:
         file_path = Path(input("Entrez le chemin du fichier CSV à importer: ") or r"passwords_export.csv")

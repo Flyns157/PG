@@ -1,4 +1,4 @@
-# pg.views.auth.py
+# pg.view.auth.py
 from tkinter import Tk, messagebox
 from tkinter.ttk import Entry, Button, Label, Frame
 

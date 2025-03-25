@@ -1,4 +1,4 @@
-# pg.views.password.py
+# pg.view.password.py
 from tkinter import Tk
 from tkinter.ttk import Treeview
 from tkinter import messagebox
