@@ -103,6 +103,7 @@ class Password(PasswordBase, table=True):
         Crée un nouveau mot de passe
         """
         try:
+            PasswordCreate.model_validate(**data)
             password = Password(**data)
             password.password = data.get("password")
             return insert(
