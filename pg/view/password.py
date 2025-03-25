@@ -16,11 +16,32 @@ NOT_SPECIFIED = ""
 COLUMNS = ("ID", "URL", "Identifiant", "Mot de passe", "Email", "Téléphone", "Date de création", "Date de modification")
 
 def add_password_tree(root: Tk) -> Treeview:
-    tree = Treeview(root, columns=COLUMNS, show="headings")
+    # Création d'un frame conteneur pour le treeview et la scrollbar
+    container = Frame(root)
+    container.pack(pady=10, fill="both", expand=True)
+    
+    # Configuration du treeview
+    tree = Treeview(container, columns=COLUMNS, show="headings")
     for col in COLUMNS:
         tree.heading(col, text=col)
-    tree.pack(pady=10, fill="both", expand=True)
-
+    
+    # Ajout de la scrollbar verticale
+    vsb = Scrollbar(container, orient="vertical", command=tree.yview)
+    tree.configure(yscrollcommand=vsb.set)
+    
+    # Placement des éléments dans le container
+    tree.grid(row=0, column=0, sticky="nsew")
+    vsb.grid(row=0, column=1, sticky="ns")
+    
+    # Configuration du redimensionnement
+    container.grid_rowconfigure(0, weight=1)
+    container.grid_columnconfigure(0, weight=1)
+    
+    # Ajustement des marges pour laisser 10px en bas
+    container.pack_configure(pady=(10, 0))  # 10px en haut, 0 en bas
+    root.update()  # Force la mise à jour de la géométrie
+    tree.pack_propagate(False)  # Empêche le treeview de redimensionner le container
+    
     tree.tag_configure("description", foreground="gray", font=("Arial", 10, "italic"))
     tree.bind("<<TreeviewSelect>>", lambda event: update_description(tree))
     return tree

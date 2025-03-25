@@ -33,7 +33,7 @@ def create_home_screen(root: Tk, user: User):
     search_frame = Frame(root)
     search_frame.pack(pady=5)
     
-    Label(search_frame, text="Rechercher: ").pack(side="left")
+    Label(search_frame, text="Rechercher: ", width=40).pack(side="left")
     search_entry = Entry(search_frame)
     search_entry.pack(side="left", padx=5)
 
