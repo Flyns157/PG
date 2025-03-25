@@ -52,7 +52,7 @@ def home(user: User):
                 connect()
             case "10":
                 clear_screen()
-                return
+                exit()
             case _:
                 clear_screen()
                 print("Choix invalide")
