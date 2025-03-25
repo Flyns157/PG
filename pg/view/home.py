@@ -12,7 +12,8 @@ from .password import (
     load_passwords,
     toggle_password_visibility,
     create_add_password_window,
-    create_edit_password_window
+    create_edit_password_window,
+    delete_selected_password
 )
 
 NOT_IMPLEMENTED_YET = "Fonctionnalité à implémenter"
@@ -57,3 +58,4 @@ def create_home_screen(root: Tk, user: User):
     Button(button_frame, text="Ajouter un mot de passe", command=lambda: create_add_password_window(root, user, tree)).pack(side="left", padx=5)
     Button(button_frame, text="Modifier le mot de passe", command=lambda: create_edit_password_window(root, user, tree)).pack(side="left", padx=5)
     Button(button_frame, text="Afficher/Masquer mot de passe", command=lambda: toggle_password_visibility(tree)).pack(side="left", padx=5)
+    Button(button_frame, text="Supprimer le mot de passe", command=lambda: delete_selected_password(user, tree)).pack(side="left", padx=5)

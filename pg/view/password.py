@@ -161,3 +161,20 @@ def create_edit_password_window(root: Tk, user: User, tree):
     
     Button(edit_window, text="Enregistrer", command=update_password).pack(pady=10)
     Button(edit_window, text="Annuler", command=edit_window.destroy).pack()
+
+def delete_selected_password(user: User, tree: Treeview):
+    selected_item = tree.selection()
+    if not selected_item:
+        messagebox.showwarning("Suppression", "Veuillez sélectionner un mot de passe à supprimer.")
+        return
+    
+    password_id = tree.item(selected_item, "values")[0]
+    confirmation = messagebox.askyesno("Confirmation", "Voulez-vous vraiment supprimer ce mot de passe ?")
+    
+    if confirmation:
+        try:
+            Password.delete_by_id(password_id)
+            messagebox.showinfo("Succès", "Mot de passe supprimé avec succès")
+            load_passwords(user=user, tree=tree, limit=10000)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Une erreur est survenue: {e}")
