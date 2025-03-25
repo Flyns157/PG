@@ -1,6 +1,6 @@
 # pg.view.password.py
-from tkinter import Tk
-from tkinter.ttk import Treeview
+from tkinter import Tk, Toplevel, Text, Scrollbar
+from tkinter.ttk import Treeview, Frame, Label, Entry, Button
 from tkinter import messagebox
 from sqlmodel import Session
 
@@ -61,3 +61,57 @@ def toggle_password_visibility(tree: Treeview):
         new_values[3]  = MASKED_PASSWORD
 
     tree.item(row, values=tuple(new_values))
+
+def create_add_password_window(root: Tk, user: User, tree):
+    add_window = Toplevel(root)
+    add_window.title("Ajouter un mot de passe")
+    add_window.geometry("400x410")
+    
+    Label(add_window, text="Site web:").pack()
+    url_entry = Entry(add_window, width=50)
+    url_entry.pack()
+    
+    Label(add_window, text="Description (optionnel):").pack()
+    description_frame = Frame(add_window)
+    description_frame.pack()
+    description_text = Text(description_frame, height=4, width=40)
+    description_text.pack(side="left", fill="both", expand=True)
+    description_scroll = Scrollbar(description_frame, command=description_text.yview)
+    description_scroll.pack(side="right", fill="y")
+    description_text.config(yscrollcommand=description_scroll.set)
+    
+    Label(add_window, text="Identifiant:").pack()
+    key_entry = Entry(add_window, width=50)
+    key_entry.pack()
+    
+    Label(add_window, text="Mot de passe:").pack()
+    password_entry = Entry(add_window, show="*", width=50)
+    password_entry.pack()
+    
+    Label(add_window, text="Adresse e-mail (optionnel):").pack()
+    email_entry = Entry(add_window, width=50)
+    email_entry.pack()
+    
+    Label(add_window, text="Numéro de téléphone (optionnel):").pack()
+    phone_entry = Entry(add_window, width=50)
+    phone_entry.pack()
+    
+    def save_password():
+        try:
+            Password.create(
+                user_id=user.id,
+                url=url_entry.get(),
+                description=description_text.get("1.0", "end").strip() or None,
+                key=key_entry.get(),
+                password=password_entry.get(),
+                email=email_entry.get() or None,
+                phone=phone_entry.get() or None
+            )
+            messagebox.showinfo("Succès", "Mot de passe ajouté avec succès")
+            add_window.destroy()
+            load_passwords(user=user, tree=tree, limit=10000)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Une erreur est survenue: {e}")
+    
+    Button(add_window, text="Enregistrer", command=save_password).pack(pady=10)
+    Button(add_window, text="Annuler", command=add_window.destroy).pack()
