@@ -12,6 +12,10 @@ from .controller.auth import connect
 from .view.auth import create_login_screen
 
 __version__ = "3.14"
+__author__ = "CUISSET Mattéo"
+__email__ = "matteo.cuisset@gmail.com"
+__license__ = "MIT"
+__project_page__ = "https://github.com/Flyns157/PG"
 
 
 def init():

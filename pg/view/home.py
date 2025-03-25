@@ -16,7 +16,7 @@ from .password import (
     delete_selected_password
 )
 
-from .. import __version__
+from .. import __version__, __author__, __email__, __license__, __project_page__
 
 NOT_IMPLEMENTED_YET = "Fonctionnalité à implémenter"
 
@@ -29,7 +29,7 @@ def create_home_screen(root: Tk, user: User):
     # TODO : déplacer les bouttons d'import et export ici
 
     Button(menu, text="Déconnexion", command=lambda: create_login_screen(root)).pack(side="right", padx=5, pady=5)
-    Button(menu, text="À propos", command=lambda: messagebox.showinfo("À propos", f"Gestionnaire de mots de passe v{__version__}")).pack(side="right", padx=5, pady=5)
+    Button(menu, text="À propos", command=lambda: messagebox.showinfo("À propos", f"Application de gestion de mots de passe\nVersion: {__version__}\nÉditeur: {__author__}\nEmail de contact: {__email__}\nPage web: {__project_page__}\nLogiciel sous licence {__license__}")).pack(side="right", padx=5, pady=5)
     
     Label(root, text=f"Bienvenue {user.username}", font=("Arial", 14)).pack(pady=10)
     
