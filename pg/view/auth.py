@@ -59,6 +59,7 @@ def register(root: Tk, username: str, password: str):
             hash_algorithm="sha256"
         )
         messagebox.showinfo("Succès", "Compte créé avec succès")
+        from .home import create_home_screen
         create_home_screen(root, user)
     except Exception as e:
         messagebox.showerror("Erreur", f"Une erreur est survenue: {e}")
