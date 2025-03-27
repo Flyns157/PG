@@ -140,7 +140,7 @@ class UserLogin(UserBase):
     password: str = Field(regex=r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$', min_length=8, description="Mot de passe en clair (sera haché)")
 
 class UserCreate(UserLogin):
-    hash_algorithm: str = Field(description="Le nom de l'algorith de cryptage à utiliser pour cet utilisateur")
+    hash_algorithm: str = Field(default="sha256", description="Le nom de l'algorith de cryptage à utiliser pour cet utilisateur")
 
 class UserUpdate(SQLModel, AutoStrRepr):
     password: str | None = Field(regex=r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$', min_length=8, description="Mot de passe en clair (sera haché)")
