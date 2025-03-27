@@ -55,11 +55,12 @@ def register(root: Tk, username: str, password: str):
     try:
         user = User.create(
             username=username,
-            password=password
+            password=password,
+            hash_algorithm="sha256"
         )
         messagebox.showinfo("Succès", "Compte créé avec succès")
         from .home import create_home_screen
         create_home_screen(root, user)
     except Exception as e:
         messagebox.showerror("Erreur", f"Une erreur est survenue: {e}")
-    create_login_screen(root)
+    create_home_screen(root, user)
