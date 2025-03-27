@@ -22,7 +22,7 @@ def create_login_screen(root: Tk):
     password_entry.grid(row=1, column=1, pady=5)
     
     Button(frame, text="Connexion", command=lambda: login(root, username_entry.get(), password_entry.get())).grid(row=2, column=0, columnspan=2, pady=10)
-    Button(frame, text="Inscription", command=create_register_screen).grid(row=3, column=0, columnspan=2, pady=5)
+    Button(frame, text="Inscription", command=lambda: create_register_screen(root)).grid(row=3, column=0, columnspan=2, pady=5)
 
 def create_register_screen(root: Tk):
     clear_screen(root)
@@ -38,8 +38,8 @@ def create_register_screen(root: Tk):
     new_password_entry = Entry(frame, show="*")
     new_password_entry.grid(row=1, column=1, pady=5)
     
-    Button(frame, text="Créer un compte", command=register(root, new_username_entry.get(), new_password_entry.get())).grid(row=2, column=0, columnspan=2, pady=10)
-    Button(frame, text="Retour", command=create_login_screen).grid(row=3, column=0, columnspan=2, pady=5)
+    Button(frame, text="Créer un compte", command=lambda: register(root, new_username_entry.get(), new_password_entry.get())).grid(row=2, column=0, columnspan=2, pady=10)
+    Button(frame, text="Retour", command=lambda: create_login_screen(root)).grid(row=3, column=0, columnspan=2, pady=5)
 
 def login(root: Tk, username: str, password: str):
     if (user := User.get_by_username(username)):
@@ -63,4 +63,4 @@ def register(root: Tk, username: str, password: str):
         create_home_screen(root, user)
     except Exception as e:
         messagebox.showerror("Erreur", f"Une erreur est survenue: {e}")
-    create_login_screen(root)
+    create_home_screen(root, user)
