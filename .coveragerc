@@ -1,0 +1,2 @@
+[run]
+omit = ./pg/main.py,*/__init__.py
