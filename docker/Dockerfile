@@ -1,4 +1,4 @@
-FROM tiangolo/uvicorn-gunicorn:python3.11
+FROM tiangolo/uvicorn-gunicorn:python3.11-slim
 
 ARG DB_CONNECTION
 ARG MODE

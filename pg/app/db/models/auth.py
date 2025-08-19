@@ -12,17 +12,17 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class AuthUser(Base):
-    id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True, nullable=False)
-    fullname = Column(String, nullable=True)
-    email = Column(String, nullable=True)
+    id              = Column(Integer, primary_key=True)
+    username        = Column(String, unique=True, nullable=False)
+    fullname        = Column(String, nullable=True)
+    email           = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)
-    is_active = Column(Boolean, default=True)
-    is_superuser = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True),
-                        default=datetime.datetime.utcnow())
-    updated_at = Column(DateTime(timezone=True),
-                        onupdate=datetime.datetime.utcnow())
+    is_active       = Column(Boolean, default=True)
+    is_superuser    = Column(Boolean, default=False)
+    created_at      = Column(DateTime(timezone=True),
+                        default=datetime.datetime.now())
+    updated_at      = Column(DateTime(timezone=True),
+                        onupdate=datetime.datetime.now())
 
     @classmethod
     def get_user(cls,
@@ -73,10 +73,7 @@ class AuthUser(Base):
             found user. Otherwise, just return False.
         """
         with session_scope() as session:
-            user = cls.get_user(session, username)
-            if not user:
-                return False
-            elif not pwd_context.verify(password, user.hashed_password):
+            if not (user := cls.get_user(session, username)) or not pwd_context.verify(password, user.hashed_password):
                 return False
             return AuthUserPublic(**user._asdict())
 
