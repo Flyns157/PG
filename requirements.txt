@@ -7,3 +7,4 @@ fuzzywuzzy
 python-Levenshtein
 sqlmodel
 pillow
+textual>=6.11.0

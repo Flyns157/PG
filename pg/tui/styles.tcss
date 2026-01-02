@@ -1,0 +1,246 @@
+/* ============================================
+   Styles CSS pour le Gestionnaire de Mots de Passe TUI
+   Thème: Moderne Sombre avec Accents Cyan
+   ============================================ */
+
+/* ---------- Styles globaux ---------- */
+Screen {
+    background: #0f0f1a;
+    color: #e0e0e0;
+}
+
+/* ---------- Panneaux ---------- */
+Panel {
+    border: solid #3b82f6;
+    border-title-color: #3b82f6;
+    border-subtitle-color: #6b7280;
+    box-shadow: 0 0 30 rgba(59, 130, 246, 0.2);
+    background: #1a1a2e;
+}
+
+/* Panneaux d'erreur */
+Panel.error {
+    border: solid #ef4444;
+    border-title-color: #ef4444;
+}
+
+/* Panneaux de succès */
+Panel.success {
+    border: solid #10b981;
+    border-title-color: #10b981;
+}
+
+/* Panneaux d'avertissement */
+Panel.warning {
+    border: solid #f59e0b;
+    border-title-color: #f59e0b;
+}
+
+/* ---------- Conteneurs ---------- */
+#login-container,
+#register-container,
+#add-container,
+#edit-container,
+#confirm-container,
+#about-container {
+    width: auto;
+    height: auto;
+    background: #1a1a2e;
+    padding: 2;
+}
+
+/* ---------- Boutons ---------- */
+Button {
+    margin: 1 0.5;
+    padding: 0 3;
+    min-width: 15;
+    background: #374151;
+    color: #e0e0e0;
+    border: solid #4b5563;
+    border-radius: 4;
+}
+
+Button:hover {
+    background: #4b5563;
+    border-color: #3b82f6;
+}
+
+Button:focus {
+    border: tall #f59e0b;
+    background: #4b5563;
+}
+
+Button.variant--primary {
+    background: #3b82f6;
+    color: #ffffff;
+    border-color: #3b82f6;
+}
+
+Button.variant--primary:hover {
+    background: #2563eb;
+    border-color: #60a5fa;
+}
+
+Button.variant--secondary {
+    background: #4b5563;
+    color: #e0e0e0;
+    border-color: #6b7280;
+}
+
+Button.variant--secondary:hover {
+    background: #6b7280;
+    border-color: #9ca3af;
+}
+
+Button.variant--error {
+    background: #dc2626;
+    color: #ffffff;
+    border-color: #dc2626;
+}
+
+Button.variant--error:hover {
+    background: #ef4444;
+    border-color: #f87171;
+}
+
+/* ---------- Champs de saisie ---------- */
+Input {
+    border: tall #374151;
+    background: #0f0f1a;
+    color: #e0e0e0;
+    padding: 0 1;
+}
+
+Input:focus {
+    border: tall #3b82f6;
+    background: #1f2937;
+}
+
+Input::placeholder {
+    color: #6b7280;
+}
+
+Input.password {
+    font-family: monospace;
+}
+
+/* ---------- Labels ---------- */
+Label {
+    color: #9ca3af;
+    margin-bottom: 0;
+}
+
+.input-label {
+    color: #9ca3af;
+}
+
+/* ---------- Tableau des mots de passe ---------- */
+DataTable {
+    height: 1fr;
+    border: solid #374151;
+    background: #0f0f1a;
+    header-background: #1f2937;
+    header-color: #e0e0e0;
+    cursor-color: #f59e0b;
+    cursor-background: #1f2937;
+    highlight-background: #374151;
+    highlight-color: #e0e0e0;
+    row-hover-background: #1f2937;
+}
+
+DataTable:focus {
+    border: solid #3b82f6;
+}
+
+/* ---------- En-tête ---------- */
+#header {
+    height: auto;
+    background: #1a1a2e;
+    border-bottom: solid #3b82f6;
+    padding: 1;
+}
+
+.header-title {
+    color: #3b82f6;
+    text-style: bold;
+}
+
+/* ---------- Barre de recherche ---------- */
+#search-container {
+    height: auto;
+    margin: 1 0;
+    background: #1a1a2e;
+}
+
+#search-input {
+    border: tall #374151;
+}
+
+#search-input:focus {
+    border: tall #3b82f6;
+}
+
+/* ---------- Barre de statut ---------- */
+#footer {
+    height: auto;
+    background: #1a1a2e;
+    border-top: solid #374151;
+    padding: 1;
+}
+
+.status-bar {
+    color: #6b7280;
+    font-size: 0.85em;
+}
+
+/* ---------- Messages ---------- */
+#error-message,
+#message {
+    color: #ef4444;
+    margin-bottom: 1;
+}
+
+.success {
+    color: #10b981;
+}
+
+.warning {
+    color: #f59e0b;
+}
+
+/* ---------- Icônes ---------- */
+#app-icon,
+#search-icon {
+    color: #3b82f6;
+    margin-right: 1;
+}
+
+/* ---------- Styles de texte ---------- */
+.title {
+    color: #3b82f6;
+    text-style: bold;
+}
+
+.subtitle {
+    color: #6b7280;
+}
+
+/* ---------- Animations ---------- */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.loading {
+    animation: pulse 1s infinite;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 80) {
+    #login-container,
+    #register-container,
+    #add-container,
+    #edit-container {
+        width: 90%;
+    }
+}

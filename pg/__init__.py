@@ -24,11 +24,14 @@ def init():
 class Mode(StrEnum):
     CONSOLE = "console"
     GUI = "gui"
+    TUI = "tui"
 
 def run_app(mode: Mode = Mode.GUI):
     init()
     if mode == Mode.GUI:
         run_gui()
+    elif mode == Mode.TUI:
+        run_tui()
     else:
         run_console()
 
@@ -36,6 +39,12 @@ def run_gui():
     root = tk.Tk()
     create_login_screen(root)
     root.mainloop()
+
+def run_tui():
+    """Run the Textual TUI interface"""
+    from .console import PasswordManagerApp
+    app = PasswordManagerApp()
+    app.run()
 
 def run_console():
     clear_screen()
