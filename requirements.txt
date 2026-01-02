@@ -6,3 +6,4 @@ pydantic-extra-types[phonenumbers]
 fuzzywuzzy
 python-Levenshtein
 sqlmodel
+pillow
