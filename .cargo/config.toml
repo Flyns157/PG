@@ -1,0 +1,3 @@
+# Lie le runtime C statiquement : l'exécutable Windows n'a besoin d'aucune DLL Visual C++.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]

@@ -179,3 +179,5 @@ password_manager.db
 *.csv
 *.json
 *.log
+# Rust
+/target/
