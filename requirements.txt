@@ -1,9 +1,0 @@
-cryptography
-sqlalchemy
-pydantic
-pydantic[email]
-pydantic-extra-types[phonenumbers]
-fuzzywuzzy
-python-Levenshtein
-sqlmodel
-pillow
