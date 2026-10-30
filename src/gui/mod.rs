@@ -243,7 +243,13 @@ impl GuiApp {
                 let label = ui.label("Recherche");
                 let search = ui
                     .add(TextEdit::singleline(&mut self.search).desired_width(220.0))
-                    .labelled_by(label.id);
+                    .labelled_by(label.id)
+                    .on_hover_text("Ctrl+F");
+                if self.dialog.is_none()
+                    && ui.input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::F))
+                {
+                    search.request_focus();
+                }
                 if search.changed() {
                     workspace.set_query(&self.search);
                     self.revealed = false;
@@ -814,6 +820,25 @@ mod tests {
         harness.key_press(Key::ArrowUp);
         harness.run_steps(3);
         assert_eq!(selected_position(&harness), start);
+    }
+
+    #[test]
+    fn ctrl_f_focuses_the_search_field() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://github.example", "p1");
+        add_entry(&mut harness, "https://impots.example", "p2");
+        harness.key_press_modifiers(Modifiers::COMMAND, Key::F);
+        harness.run_steps(3);
+        harness
+            .input_mut()
+            .events
+            .push(egui::Event::Text("impots".to_owned()));
+        harness.run_steps(3);
+        assert!(
+            harness
+                .query_by_label("https://github.example (moi)")
+                .is_none()
+        );
     }
 
     #[test]
