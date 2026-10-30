@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui::{
-    Align, Button, Color32, Context, Grid, Key, Layout, Modal, RichText, ScrollArea, TextEdit, Ui,
-    vec2,
+    Align, Button, Color32, Context, Grid, Key, Layout, Modal, Modifiers, RichText, ScrollArea,
+    TextEdit, Ui, vec2,
 };
 use zeroize::Zeroizing;
 
@@ -286,7 +286,22 @@ impl GuiApp {
         let Some(workspace) = &mut self.workspace else {
             return;
         };
+        let previous = workspace.selected_position();
+        if self.dialog.is_none() {
+            ui.input_mut(|input| {
+                if input.consume_key(Modifiers::NONE, Key::ArrowUp) {
+                    workspace.move_selection(-1);
+                }
+                if input.consume_key(Modifiers::NONE, Key::ArrowDown) {
+                    workspace.move_selection(1);
+                }
+            });
+        }
         let selected = workspace.selected_position();
+        let moved = selected != previous;
+        if moved {
+            self.revealed = false;
+        }
         let mut clicked = None;
         ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             // Lignes jointives : toute la largeur est cliquable, sans trou entre deux entrées.
@@ -296,8 +311,12 @@ impl GuiApp {
                 let row = Button::selectable(position == selected, text)
                     .truncate()
                     .min_size(vec2(ui.available_width(), LIST_ROW_HEIGHT));
-                if ui.add(row).clicked() {
+                let response = ui.add(row);
+                if response.clicked() {
                     clicked = Some(position);
+                }
+                if moved && position == selected {
+                    response.scroll_to_me(None);
                 }
             }
         });
@@ -747,6 +766,54 @@ mod tests {
                 .is_some()
         );
         assert!(harness.state().entries().is_empty());
+    }
+
+    fn selected_position(harness: &Harness<'_, GuiApp>) -> usize {
+        harness
+            .state()
+            .workspace
+            .as_ref()
+            .unwrap()
+            .selected_position()
+    }
+
+    #[test]
+    fn arrow_keys_move_the_selection_and_stop_at_the_ends() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        add_entry(&mut harness, "https://b.example", "p2");
+        click(&mut harness, "https://a.example (moi)");
+        click(&mut harness, "https://b.example (moi)");
+        let start = selected_position(&harness);
+        let (toward_other, away) = if start == 0 {
+            (Key::ArrowDown, Key::ArrowUp)
+        } else {
+            (Key::ArrowUp, Key::ArrowDown)
+        };
+
+        harness.key_press(away);
+        harness.run_steps(3);
+        assert_eq!(selected_position(&harness), start);
+
+        harness.state_mut().revealed = true;
+        harness.key_press(toward_other);
+        harness.run_steps(3);
+        assert_ne!(selected_position(&harness), start);
+        assert!(!harness.state().revealed);
+    }
+
+    #[test]
+    fn arrow_keys_do_nothing_while_a_dialog_is_open() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        add_entry(&mut harness, "https://b.example", "p2");
+        click(&mut harness, "https://a.example (moi)");
+        let start = selected_position(&harness);
+        click(&mut harness, "Ajouter");
+        harness.key_press(Key::ArrowDown);
+        harness.key_press(Key::ArrowUp);
+        harness.run_steps(3);
+        assert_eq!(selected_position(&harness), start);
     }
 
     #[test]
