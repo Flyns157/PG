@@ -1,4 +1,5 @@
 //! Import et export CSV, compatibles avec les exports de la version Python de PG.
+//! L'import accepte aussi les exports de mots de passe de Chromium.
 
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
@@ -14,8 +15,9 @@ use crate::store::ImportedEntry;
 #[derive(Serialize, Deserialize)]
 struct CsvRow {
     url: String,
-    #[serde(default)]
+    #[serde(default, alias = "note")]
     description: String,
+    #[serde(alias = "username")]
     key: String,
     password: String,
     #[serde(default)]
@@ -126,6 +128,28 @@ mod tests {
             records[0].created_at.to_rfc3339(),
             "2026-10-30T17:11:00+00:00"
         );
+    }
+
+    #[test]
+    fn reads_chromium_export() {
+        let csv = "name,url,username,password,note\n\
+                   a.example,https://a.example/login,alice,Xy1]g:oz?{,\n\
+                   b.example,https://b.example/,bob@b.example,s3cret,ma note\n";
+        let records = read_entries(csv.as_bytes()).unwrap();
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].fields.url, "https://a.example/login");
+        assert_eq!(records[0].fields.username, "alice");
+        assert_eq!(records[0].fields.password, "Xy1]g:oz?{");
+        assert_eq!(records[0].fields.notes, "");
+        assert_eq!(records[1].fields.username, "bob@b.example");
+        assert_eq!(records[1].fields.notes, "ma note");
+    }
+
+    #[test]
+    fn reads_chromium_export_without_note_column() {
+        let csv = "name,url,username,password\na.example,https://a.example/,alice,s3cret\n";
+        let records = read_entries(csv.as_bytes()).unwrap();
+        assert_eq!(records[0].fields.username, "alice");
     }
 
     #[test]

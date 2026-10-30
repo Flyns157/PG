@@ -48,6 +48,10 @@ Les deux formats de base sont incompatibles : la migration passe par le CSV.
 2. Dans PG V3, créez un compte, puis importez ce fichier. Les colonnes sont reconnues quel que soit leur ordre et les doublons sont ignorés.
 3. Supprimez le fichier CSV, ainsi que l'ancien `password_manager.db` et ses sauvegardes.
 
+## Importer depuis un navigateur
+
+PG importe aussi les exports CSV de mots de passe de Chromium (`name,url,username,password,note`). Toutes les lignes doivent avoir un identifiant et un mot de passe : sinon, l'import s'arrête en indiquant la ligne à corriger.
+
 ## Développement
 
 ```
