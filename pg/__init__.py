@@ -5,7 +5,7 @@ from enum import StrEnum
 
 from .utils.visual import clear_screen
 
-from .data.database import engine
+from .data.database import engine, migrate_schema
 from .data.models import *
 
 from .controller.auth import connect
@@ -20,6 +20,7 @@ __project_page__ = "https://github.com/Flyns157/PG"
 
 def init():
     SQLModel.metadata.create_all(engine)
+    migrate_schema(engine)
 
 class Mode(StrEnum):
     CONSOLE = "console"

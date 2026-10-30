@@ -4,11 +4,19 @@ from typing_extensions import deprecated
 from sqlmodel import create_engine, Session, SQLModel
 from sqlmodel.main import is_table_model_class
 from sqlmodel.orm.session import Select, _TSelectParam
-from sqlalchemy import Engine
+from sqlalchemy import Engine, inspect
 from typing import Callable
 
 
 engine = create_engine('sqlite:///password_manager.db')
+
+def migrate_schema(engine: Engine = engine):
+    """
+    Ajoute aux bases existantes les colonnes absentes de leur schéma
+    """
+    if "kdf_salt" not in {column["name"] for column in inspect(engine).get_columns("user")}:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("ALTER TABLE user ADD COLUMN kdf_salt VARCHAR NOT NULL DEFAULT ''")
 
 from enum import Enum
 

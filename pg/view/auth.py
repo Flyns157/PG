@@ -3,11 +3,13 @@ from tkinter import Tk, messagebox
 from tkinter.ttk import Entry, Button, Label, Frame
 
 from ..data.models import User
+from ..utils.security import lock_keys
 
 from . import clear_screen
 
 
 def create_login_screen(root: Tk):
+    lock_keys()
     clear_screen(root)
     
     frame = Frame(root, padding=20)
@@ -43,7 +45,7 @@ def create_register_screen(root: Tk):
 
 def login(root: Tk, username: str, password: str):
     if (user := User.get_by_username(username)):
-        if user.verify_password(password):
+        if user.unlock(password):
             from .home import create_home_screen
             create_home_screen(root, user)
         else:
@@ -55,8 +57,7 @@ def register(root: Tk, username: str, password: str):
     try:
         user = User.create(
             username=username,
-            password=password,
-            hash_algorithm="sha256"
+            password=password
         )
         messagebox.showinfo("Succès", "Compte créé avec succès")
         from .home import create_home_screen

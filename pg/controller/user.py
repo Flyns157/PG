@@ -3,7 +3,6 @@ import getpass
 from sqlmodel import Session
 
 from ..utils.visual import clear_screen
-from ..utils.security import supported_algorithms
 
 from ..data.database import engine
 from ..data.models import User
@@ -18,8 +17,7 @@ def console_create_user():
             user = User.create(
                 session=session,
                 username=input("Nom d'utilisateur: "),
-                password=getpass.getpass("Mot de passe: "),
-                hash_algorithm=input(f"\nAlgorithme de hashage à utiliser\n-> {', '.join(supported_algorithms())}\n(optionnel): ") or "sha256"
+                password=getpass.getpass("Mot de passe: ")
             )
             # clear_screen()
             # print(f"Utilisateur {user.username} créé avec succès!")
@@ -33,9 +31,8 @@ def console_create_user():
         except Exception:
             pass
 
-def create_user(username: str, password: str, hash_algorithm: str = "sha256") -> User|None:
+def create_user(username: str, password: str) -> User|None:
     return User.create(
         username=username,
-        password=password,
-        hash_algorithm=hash_algorithm
+        password=password
     )

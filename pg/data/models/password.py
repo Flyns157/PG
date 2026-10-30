@@ -12,9 +12,13 @@ from sqlalchemy import Engine
 
 from ...utils.debugging import AutoStrRepr
 from ...utils.type import HttpUrlType
-from ...utils.security import encrypt_password, decrypt_password
+from ...utils.security import encrypt_password, decrypt_password, get_key
 
 from ..database import engine, query, insert, delete
+
+
+def local_now() -> datetime:
+    return datetime.now().astimezone()
 
 
 class PasswordBase(SQLModel, AutoStrRepr):
@@ -28,36 +32,25 @@ class PasswordBase(SQLModel, AutoStrRepr):
 
 class Password(PasswordBase, table=True):
     id: int = Field(default=None, primary_key=True , description="Identifiant de l'enregistrement d'informations de connection")
-    date_added: datetime = Field(default_factory=datetime.now, description="Date de création du mot de passe")
-    date_updated: datetime = Field(default_factory=datetime.now, description="Date de dernière modification du mot de passe")
+    date_added: datetime = Field(default_factory=local_now, description="Date de création du mot de passe")
+    date_updated: datetime = Field(default_factory=local_now, description="Date de dernière modification du mot de passe")
 
     # Relationship to the User model, setting up a one-to-many relationship
     user: "User" = Relationship(back_populates="passwords")
 
     @property
-    def loaded_user(self):
-        """
-        Retourne l'utilisateur complet (contournement de l'import paresseux depuis la base de données)
-        """
-        from ..models.user import User
-        # TODO : trouver une manière de vérifier si l'import est passeux
-        # if isinstance(self.user, User):  # Si l'utilisateur est déjà chargé, on le retourne directement
-        #     return self.user
-        return User.get_by_id(self.user_id)
-    
-    @property
     def password(self):
         """
         Retourne le mot de passe en clair
         """
-        return decrypt_password(self.password_encrypted, self.loaded_user.encryption_key)
+        return decrypt_password(self.password_encrypted, get_key(self.user_id))
     
     @password.setter
     def password(self, password: str):
         """
         Définit le mot de passe en clair
         """
-        self.password_encrypted = encrypt_password(password, self.loaded_user.encryption_key)
+        self.password_encrypted = encrypt_password(password, get_key(self.user_id))
     
     def refresh(self, engine: Engine=engine, session: Session=None):
         """

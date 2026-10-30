@@ -23,8 +23,8 @@ def import_passwords(user: User, file_path: str | Path, session: Session=None) -
                 email=record["email"] or None,
                 phone=record["phone"] or None,
                 # Convertion les chaînes de caractères en objets datetime (à cause du format ISO utilisé par le CSV)
-                date_added=datetime.fromisoformat(record["date_added"]),
-                date_updated=datetime.fromisoformat(record["date_updated"])
+                date_added=datetime.fromisoformat(record["date_added"]).astimezone(),
+                date_updated=datetime.fromisoformat(record["date_updated"]).astimezone()
             )
 
 def export_passwords(user: User, file_path: str | Path, session: Session) -> None:
