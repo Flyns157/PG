@@ -17,6 +17,7 @@ use crate::csv_io;
 use crate::entry::{Entry, EntryFields};
 use crate::error::{Error, Result};
 use crate::generator::{DEFAULT_LENGTH, generate_password};
+use crate::mcp::{self, McpServer};
 use crate::store::Store;
 use crate::workspace::Workspace;
 
@@ -24,7 +25,7 @@ const SUBMIT_HINT: &str =
     "Entrée : valider · Tab : champ suivant · Ctrl+R : afficher · Échap : retour";
 const ENTRY_HINT: &str =
     "Entrée : valider · Tab : suivant · Ctrl+G : générer · Ctrl+R : afficher · Échap : retour";
-const LIST_HINT: &str = "/ chercher · v afficher · c copier · u identifiant · a ajouter · e modifier · d supprimer · i importer · x exporter · m maître · l verrouiller · q quitter";
+const LIST_HINT: &str = "/ chercher · v afficher · c copier · u identifiant · a ajouter · e modifier · d supprimer · i importer · x exporter · m maître · p MCP · P jeton MCP · l verrouiller · q quitter";
 
 #[derive(Clone)]
 enum FormKind {
@@ -52,6 +53,7 @@ enum Screen {
 pub struct App {
     store: Store,
     clipboard: SecretClipboard,
+    mcp: Option<McpServer>,
     workspace: Option<Workspace>,
     screen: Screen,
     status: Option<(String, bool)>,
@@ -64,6 +66,7 @@ impl App {
         Self {
             store,
             clipboard: SecretClipboard::default(),
+            mcp: None,
             workspace: None,
             screen: login_screen(),
             status: None,
@@ -81,6 +84,31 @@ impl App {
         if self.workspace.is_some() && self.last_activity.elapsed() >= IDLE_LOCK {
             self.lock();
             self.set_info("Coffre verrouillé après 5 minutes d'inactivité");
+        }
+        // Après le verrouillage, et sans compter comme une activité de l'utilisateur.
+        if let Some(server) = &self.mcp {
+            let clipboard = &mut self.clipboard;
+            let notices =
+                server.handle_pending(self.workspace.as_ref(), |text| clipboard.copy(text));
+            for notice in notices {
+                self.set_info(notice);
+            }
+        }
+    }
+
+    fn toggle_mcp(&mut self) {
+        match mcp::toggle(&mut self.mcp, &mut self.clipboard, Box::new(|| {})) {
+            Ok(message) => self.set_info(message),
+            Err(error) => self.set_error(error),
+        }
+    }
+
+    fn copy_mcp_token(&mut self) {
+        if let Some(server) = &self.mcp {
+            let message = mcp::copy_token(server, &mut self.clipboard);
+            self.set_info(message);
+        } else {
+            self.set_info("Le serveur MCP est désactivé");
         }
     }
 
@@ -360,6 +388,8 @@ impl App {
                     Form::new("Changer le mot de passe maître", SUBMIT_HINT, fields),
                 );
             }
+            KeyCode::Char('p') => self.toggle_mcp(),
+            KeyCode::Char('P') => self.copy_mcp_token(),
             KeyCode::Char('l') => self.lock(),
             KeyCode::Char('q') | KeyCode::Esc => self.quit = true,
             _ => {}
@@ -457,14 +487,19 @@ impl App {
             Constraint::Length(3),
             Constraint::Fill(1),
             Constraint::Length(1),
-            Constraint::Length(2),
+            Constraint::Length(3),
         ])
         .areas(frame.area());
 
         let title = format!(
-            "PG · {} · {} entrée(s)",
+            "PG · {} · {} entrée(s){}",
             workspace.session.username(),
-            workspace.all_entries().len()
+            workspace.all_entries().len(),
+            if self.mcp.is_some() {
+                " · MCP actif"
+            } else {
+                ""
+            }
         );
         frame.render_widget(
             Paragraph::new(title).style(Style::new().add_modifier(Modifier::BOLD)),
@@ -701,6 +736,22 @@ mod tests {
             .position(|row| row.contains("Mot de passe maître"))
             .unwrap();
         assert!(rows[last_field + 1].contains('└'));
+    }
+
+    #[test]
+    fn p_starts_then_stops_the_mcp_server() {
+        let mut app = registered_app();
+        assert!(app.mcp.is_none());
+        press(&mut app, KeyCode::Char('p'));
+        assert!(screen(&app).contains("MCP actif"), "{}", screen(&app));
+        let server = app.mcp.as_ref().unwrap();
+        let url = server.url().to_owned();
+        let body = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
+        assert_eq!(mcp::post(&url, server.token(), body).0, 202);
+        press(&mut app, KeyCode::Char('p'));
+        assert!(app.mcp.is_none());
+        assert!(!screen(&app).contains("MCP actif"));
+        assert!(std::net::TcpStream::connect(("127.0.0.1", mcp::PORT)).is_err());
     }
 
     fn registered_app() -> App {

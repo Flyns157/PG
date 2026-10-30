@@ -16,6 +16,7 @@ use crate::csv_io;
 use crate::entry::EntryFields;
 use crate::error::{Error, Result};
 use crate::generator::{DEFAULT_LENGTH, generate_password};
+use crate::mcp::{self, McpServer};
 use crate::store::Store;
 use crate::workspace::Workspace;
 
@@ -78,6 +79,7 @@ enum DialogAction {
 struct GuiApp {
     store: Store,
     clipboard: SecretClipboard,
+    mcp: Option<McpServer>,
     workspace: Option<Workspace>,
     login: LoginForm,
     dialog: Option<Dialog>,
@@ -93,6 +95,7 @@ impl GuiApp {
         Self {
             store,
             clipboard: SecretClipboard::default(),
+            mcp: None,
             workspace: None,
             login: LoginForm::default(),
             dialog: None,
@@ -132,6 +135,15 @@ impl GuiApp {
         if self.workspace.is_some() && self.last_activity.elapsed() >= IDLE_LOCK {
             self.lock();
             self.set_info("Coffre verrouillé après 5 minutes d'inactivité");
+        }
+        // Après le verrouillage, et sans compter comme une activité de l'utilisateur.
+        if let Some(server) = &self.mcp {
+            let clipboard = &mut self.clipboard;
+            let notices =
+                server.handle_pending(self.workspace.as_ref(), |text| clipboard.copy(text));
+            for notice in notices {
+                self.set_info(notice);
+            }
         }
 
         if self.workspace.is_some() {
@@ -259,6 +271,24 @@ impl GuiApp {
                 if ui.button("Verrouiller").clicked() {
                     self.lock();
                     return;
+                }
+                if let Some(server) = &self.mcp
+                    && ui.button("Jeton MCP").on_hover_text(server.url()).clicked()
+                {
+                    let message = mcp::copy_token(server, &mut self.clipboard);
+                    self.set_info(message);
+                }
+                if ui
+                    .selectable_label(self.mcp.is_some(), "MCP")
+                    .on_hover_text("Active ou désactive le serveur MCP local")
+                    .clicked()
+                {
+                    let ctx = ui.ctx().clone();
+                    let waker = Box::new(move || ctx.request_repaint());
+                    match mcp::toggle(&mut self.mcp, &mut self.clipboard, waker) {
+                        Ok(message) => self.set_info(message),
+                        Err(error) => self.set_error(error),
+                    }
                 }
                 if ui.button("Mot de passe maître").clicked() {
                     self.dialog = Some(Dialog::ChangeMaster {
@@ -839,6 +869,26 @@ mod tests {
                 .query_by_label("https://github.example (moi)")
                 .is_none()
         );
+    }
+
+    #[test]
+    fn mcp_calls_are_answered_by_the_interface_loop() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "s3cret-du-coffre");
+        let server = McpServer::start_on(0, Box::new(|| {})).unwrap();
+        let (url, token) = (server.url().to_owned(), server.token().to_owned());
+        harness.state_mut().mcp = Some(server);
+        let client = std::thread::spawn(move || {
+            let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_entries","arguments":{}}}"#;
+            mcp::post(&url, &token, body)
+        });
+        while !client.is_finished() {
+            harness.step();
+        }
+        let (status, body) = client.join().unwrap();
+        assert_eq!(status, 200);
+        assert!(body.contains("https://a.example"));
+        assert!(!body.contains("s3cret-du-coffre"));
     }
 
     #[test]

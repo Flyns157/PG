@@ -6,6 +6,7 @@ pub mod csv_io;
 pub mod entry;
 pub mod error;
 pub mod generator;
+pub mod mcp;
 pub mod search;
 pub mod store;
 pub mod workspace;

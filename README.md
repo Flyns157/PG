@@ -52,6 +52,27 @@ Les deux formats de base sont incompatibles : la migration passe par le CSV.
 
 PG importe aussi les exports CSV de mots de passe de Chromium (`name,url,username,password,note`). Toutes les lignes doivent avoir un identifiant et un mot de passe : sinon, l'import s'arrête en indiquant la ligne à corriger.
 
+## Serveur MCP intégré
+
+PG peut exposer le coffre à un client IA via MCP. Le serveur est désactivé à chaque lancement. Pour l'activer ou le désactiver, une fois le coffre déverrouillé, utilisez le bouton **MCP** en GUI ou la touche `p` en TUI. Il écoute sur `http://127.0.0.1:39517/mcp`.
+
+Chaque activation crée un nouveau jeton et le copie dans le presse-papiers (bouton **Jeton MCP** ou touche `P` pour le recopier). Le client doit donc être reconfiguré à chaque activation :
+
+```
+claude mcp add --transport http pg http://127.0.0.1:39517/mcp --header "Authorization: Bearer <jeton>"
+```
+
+| Outil | Effet |
+|---|---|
+| `search_entries` | Renvoie l'id, le site, l'identifiant et les notes des entrées |
+| `copy_password` | Copie un mot de passe dans le presse-papiers, effacé après 30 secondes, et l'indique dans PG |
+
+Limites à connaître :
+
+- Les mots de passe ne sont jamais renvoyés au client. Les sites, identifiants et **notes** le sont, et peuvent donc partir vers le fournisseur d'IA : ne gardez pas de secret dans les notes si vous activez le MCP.
+- `copy_password` ne demande pas de confirmation. Tout programme qui lit le presse-papiers peut lire le mot de passe copié.
+- Les appels MCP ne repoussent pas le verrouillage automatique. Un coffre verrouillé répond par une erreur, et le serveur reste actif jusqu'à ce que vous le désactiviez ou quittiez PG.
+
 ## Développement
 
 ```
