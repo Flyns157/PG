@@ -123,7 +123,7 @@ impl App {
         match (key.code, kind.clone()) {
             (KeyCode::Enter, _) => self.submit_form(),
             (KeyCode::Esc, FormKind::Login) => self.quit = true,
-            (KeyCode::Esc, FormKind::Register) => {
+            (KeyCode::Esc | KeyCode::F(2), FormKind::Register) => {
                 self.screen = login_screen();
                 self.status = None;
             }
@@ -589,6 +589,7 @@ fn login_screen() -> Screen {
 }
 
 fn register_screen() -> Screen {
+    let hint = "Entrée : valider · Tab : champ suivant · Ctrl+R : afficher · F2 : se connecter · Échap : retour";
     let fields = vec![
         Field::text("Utilisateur"),
         Field::secret("Mot de passe maître"),
@@ -596,7 +597,7 @@ fn register_screen() -> Screen {
     ];
     Screen::Form(
         FormKind::Register,
-        Form::new("PG · Créer un compte", SUBMIT_HINT, fields),
+        Form::new("PG · Créer un compte", hint, fields),
     )
 }
 
@@ -662,6 +663,16 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect();
         assert!(bottom.contains("F2 : créer un compte · Échap : quitter"));
+    }
+
+    #[test]
+    fn f2_switches_between_login_and_register() {
+        let mut app = App::new(Store::open_in_memory().unwrap().with_kdf(FAST_KDF));
+        press(&mut app, KeyCode::F(2));
+        assert!(screen(&app).contains("PG · Créer un compte"));
+        assert!(screen(&app).contains("F2 : se connecter"));
+        press(&mut app, KeyCode::F(2));
+        assert!(screen(&app).contains("PG · Connexion"));
     }
 
     #[test]
