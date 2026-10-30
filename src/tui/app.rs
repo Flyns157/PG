@@ -652,6 +652,18 @@ mod tests {
             .collect()
     }
 
+    #[test]
+    fn login_hint_is_complete_at_the_bottom_of_the_screen() {
+        let app = App::new(Store::open_in_memory().unwrap().with_kdf(FAST_KDF));
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal.draw(|frame| app.render(frame)).unwrap();
+        let bottom: String = terminal.backend().buffer().content()[80 * 22..]
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(bottom.contains("F2 : créer un compte · Échap : quitter"));
+    }
+
     fn registered_app() -> App {
         let mut app = App::new(Store::open_in_memory().unwrap().with_kdf(FAST_KDF));
         press(&mut app, KeyCode::F(2));

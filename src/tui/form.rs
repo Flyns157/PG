@@ -5,7 +5,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Clear, Paragraph};
+use ratatui::widgets::{Block, Clear, Paragraph, Wrap};
 use zeroize::Zeroizing;
 
 pub struct Field {
@@ -130,16 +130,17 @@ impl Form {
     }
 
     pub fn render(&self, frame: &mut Frame, status: Option<&Line<'_>>) {
-        let height = self.fields.len() as u16 + 5;
-        let area = centered(frame.area(), 76, height);
+        let height = self.fields.len() as u16 + 4;
+        let [main_area, hint_area] =
+            Layout::vertical([Constraint::Fill(1), Constraint::Length(2)]).areas(frame.area());
+        let area = centered(main_area, 76, height);
         frame.render_widget(Clear, area);
         let block = Block::bordered().title(format!(" {} ", self.title));
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        let [fields_area, _, hint_area, status_area] = Layout::vertical([
+        let [fields_area, _, status_area] = Layout::vertical([
             Constraint::Length(self.fields.len() as u16),
-            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
         ])
@@ -187,7 +188,9 @@ impl Form {
             }
         }
         frame.render_widget(
-            Paragraph::new(self.hint).style(Style::new().fg(Color::DarkGray)),
+            Paragraph::new(self.hint)
+                .wrap(Wrap { trim: true })
+                .style(Style::new().fg(Color::DarkGray)),
             hint_area,
         );
         if let Some(status) = status {
