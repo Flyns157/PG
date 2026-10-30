@@ -4,7 +4,10 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use eframe::egui;
-use egui::{Align, Color32, Context, Grid, Key, Layout, Modal, RichText, ScrollArea, TextEdit, Ui};
+use egui::{
+    Align, Button, Color32, Context, Grid, Key, Layout, Modal, RichText, ScrollArea, TextEdit, Ui,
+    vec2,
+};
 use zeroize::Zeroizing;
 
 use crate::IDLE_LOCK;
@@ -18,6 +21,7 @@ use crate::workspace::Workspace;
 
 const TICK: Duration = Duration::from_secs(1);
 const LOGIN_FORM_WIDTH: f32 = 450.0;
+const LIST_ROW_HEIGHT: f32 = 26.0;
 
 pub fn run(store: Store) -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -285,9 +289,14 @@ impl GuiApp {
         let selected = workspace.selected_position();
         let mut clicked = None;
         ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+            // Lignes jointives : toute la largeur est cliquable, sans trou entre deux entrées.
+            ui.spacing_mut().item_spacing.y = 0.0;
             for (position, entry) in workspace.visible().enumerate() {
                 let text = format!("{} ({})", entry.fields.url, entry.fields.username);
-                if ui.selectable_label(position == selected, text).clicked() {
+                let row = Button::selectable(position == selected, text)
+                    .truncate()
+                    .min_size(vec2(ui.available_width(), LIST_ROW_HEIGHT));
+                if ui.add(row).clicked() {
                     clicked = Some(position);
                 }
             }
@@ -738,6 +747,21 @@ mod tests {
                 .is_some()
         );
         assert!(harness.state().entries().is_empty());
+    }
+
+    #[test]
+    fn list_row_fills_the_panel_width() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        add_entry(&mut harness, "https://b.example", "p2");
+        let first = harness.get_by_label("https://a.example (moi)").rect();
+        let second = harness.get_by_label("https://b.example (moi)").rect();
+        assert!(first.width() > 300.0, "largeur : {}", first.width());
+        // Les lignes sont jointives, quel que soit leur ordre d'affichage.
+        let gap = (second.min.y - first.max.y)
+            .abs()
+            .min((first.min.y - second.max.y).abs());
+        assert!(gap < 1.0, "écart : {gap}");
     }
 
     #[test]
