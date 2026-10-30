@@ -130,7 +130,8 @@ impl Form {
     }
 
     pub fn render(&self, frame: &mut Frame, status: Option<&Line<'_>>) {
-        let height = self.fields.len() as u16 + 4;
+        // Le statut et sa ligne de séparation n'occupent de place que s'il y a un message.
+        let height = self.fields.len() as u16 + if status.is_some() { 4 } else { 2 };
         let [main_area, hint_area] =
             Layout::vertical([Constraint::Fill(1), Constraint::Length(2)]).areas(frame.area());
         let area = centered(main_area, 76, height);

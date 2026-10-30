@@ -664,6 +664,25 @@ mod tests {
         assert!(bottom.contains("F2 : créer un compte · Échap : quitter"));
     }
 
+    #[test]
+    fn form_box_has_no_empty_line_without_status() {
+        let app = App::new(Store::open_in_memory().unwrap().with_kdf(FAST_KDF));
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal.draw(|frame| app.render(frame)).unwrap();
+        let rows: Vec<String> = terminal
+            .backend()
+            .buffer()
+            .content()
+            .chunks(80)
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect())
+            .collect();
+        let last_field = rows
+            .iter()
+            .position(|row| row.contains("Mot de passe maître"))
+            .unwrap();
+        assert!(rows[last_field + 1].contains('└'));
+    }
+
     fn registered_app() -> App {
         let mut app = App::new(Store::open_in_memory().unwrap().with_kdf(FAST_KDF));
         press(&mut app, KeyCode::F(2));
