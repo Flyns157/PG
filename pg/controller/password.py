@@ -123,7 +123,7 @@ def console_search_password(user: User):
                 return
             nearest_url = listed_passwords[0].url
             nearest_domaine_name=str(nearest_url).split("/")[2]
-            statement = select(Password).where(Password.url.like(f'%{nearest_domaine_name}%') & Password.user_id == user.id)
+            statement = select(Password).where(Password.url.like(f'%{nearest_domaine_name}%') & (Password.user_id == user.id))
             nearest_passwords = session.exec(statement).fetchall()
 
             clear_screen()

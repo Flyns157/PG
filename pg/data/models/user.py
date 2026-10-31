@@ -7,7 +7,17 @@ from sqlmodel import SQLModel, Field, Relationship, Session, select
 from sqlalchemy import Engine
 from pydantic import ValidationError
 
-from ...utils.security import generate_key, hash_password, supported_algorithms
+from hmac import compare_digest
+
+from ...utils.security import (
+    KDF_ALGORITHM,
+    decrypt_password,
+    derive_credentials,
+    encrypt_password,
+    generate_salt,
+    hash_password,
+    store_key
+)
 from ...utils.debugging import AutoStrRepr
 
 from ..database import engine, query, insert, delete
@@ -18,19 +28,14 @@ class UserBase(SQLModel, AutoStrRepr):
 
 class User(UserBase, table = True):
     id: int = Field(default=None, primary_key=True, description="L'identifiant unique d'un utilisateur")
-    password_hash: str = Field(description="Le mot de passe haché")
-    hash_algorithm: str = Field(default="sha256", description="Le nom de l'algorith de cryptage à utiliser pour cet utilisateur", allow_mutation=False)
-    encryption_key: str = Field(default_factory=generate_key, description="La clef de hachage à utiliser pour cet utilisateur", allow_mutation=False)
+    password_hash: str = Field(description="Le vérificateur du mot de passe maître")
+    hash_algorithm: str = Field(default=KDF_ALGORITHM, description="L'algorithme de dérivation du mot de passe maître")
+    kdf_salt: str = Field(default="", description="Le sel de dérivation du mot de passe maître")
+    encryption_key: str = Field(default="", description="La clé héritée d'un compte pas encore migré, vide ensuite")
 
     # Relationship to the Password model, setting up a one-to-many relationship
     passwords: list["Password"] = Relationship(back_populates="user")
 
-    def set_password(self, password: str):
-        """
-        Définit le mot de passe en clair
-        """
-        self.password_hash = hash_password(password, self.hash_algorithm)
-    
     def refresh(self, engine: Engine=engine, session: Session=None):
         """
         Rafraîchit les données de l'utilisateur à partir de la base de données
@@ -41,12 +46,44 @@ class User(UserBase, table = True):
         else:
             session.refresh(self)
 
-    def verify_password(self, password: str) -> bool:
+    def unlock(self, password: str, engine: Engine=engine) -> bool:
         """
-        Vérifie si le mot de passe fourni correspond à celui enregistré pour cet utilisateur
+        Vérifie le mot de passe fourni et, s'il est correct, garde en mémoire la clé de chiffrement de l'utilisateur.
+        Un compte encore protégé par l'ancien schéma est migré à cette occasion.
         """
-        return hash_password(password, self.hash_algorithm) == self.password_hash
-    
+        if self.hash_algorithm != KDF_ALGORITHM:
+            if not compare_digest(hash_password(password, self.hash_algorithm), self.password_hash):
+                return False
+            self._migrate(password, engine)
+            return True
+
+        key, verifier = derive_credentials(password, self.kdf_salt)
+        if not compare_digest(verifier, self.password_hash):
+            return False
+        store_key(self.id, key)
+        return True
+
+    def _migrate(self, password: str, engine: Engine=engine):
+        """
+        Rechiffre les mots de passe avec une clé dérivée du mot de passe maître, puis efface l'ancienne clé
+        """
+        salt = generate_salt()
+        key, verifier = derive_credentials(password, salt)
+        with Session(engine) as session:
+            session.add(self)
+            for entry in self.passwords:
+                entry.password_encrypted = encrypt_password(decrypt_password(entry.password_encrypted, self.encryption_key), key)
+            self.password_hash = verifier
+            self.hash_algorithm = KDF_ALGORITHM
+            self.kdf_salt = salt
+            self.encryption_key = ""
+            session.commit()
+            session.refresh(self)
+        store_key(self.id, key)
+        # VACUUM retire du fichier les pages libérées, qui contiennent encore l'ancienne clé
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+            connection.exec_driver_sql("VACUUM")
+
     @staticmethod
     def get_by_id(id: int, engine: Engine=engine, session: Session|None=None) -> "User":
         """
@@ -78,14 +115,15 @@ class User(UserBase, table = True):
             user_data = UserCreate.model_validate(data).model_dump()
             if User.get_by_username(user_data["username"], engine, session):
                 raise ValueError(f"Username {user_data['username']} already exists")
-            if data["hash_algorithm"] not in supported_algorithms():
-                raise ValueError(f"Hash algorithm {data['hash_algorithm']} is not supported")
-            user_data["password_hash"] = hash_password(user_data.pop("password"), user_data["hash_algorithm"])
-            return insert(
-                orm_instance=User(**user_data),
+            salt = generate_salt()
+            key, verifier = derive_credentials(user_data.pop("password"), salt)
+            user = insert(
+                orm_instance=User(**user_data, password_hash=verifier, kdf_salt=salt),
                 engine=engine,
                 session=session
             )
+            store_key(user.id, key)
+            return user
         except ValidationError as e:
             raise ValueError(f"Invalid data: {e}")
         
@@ -140,7 +178,7 @@ class UserLogin(UserBase):
     password: str = Field(regex=r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$', min_length=8, description="Mot de passe en clair (sera haché)")
 
 class UserCreate(UserLogin):
-    hash_algorithm: str = Field(default="sha256", description="Le nom de l'algorith de cryptage à utiliser pour cet utilisateur")
+    ...
 
 class UserUpdate(SQLModel, AutoStrRepr):
     password: str | None = Field(regex=r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$', min_length=8, description="Mot de passe en clair (sera haché)")

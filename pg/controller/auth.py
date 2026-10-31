@@ -2,10 +2,12 @@
 import getpass
 
 from ..data.models import User
+from ..utils.security import lock_keys
 from ..utils.visual import clear_screen
 
 
 def connect():
+    lock_keys()
     clear_screen()
     while True:
         print("\n1. S'inscrire\n2. Se connecter\n3. Quitter")
@@ -28,7 +30,7 @@ def consol_login():
     username = input("Nom d'utilisateur: ")
 
     if (user := User.get_by_username(username)):
-        if user.verify_password(getpass.getpass("Mot de passe: ")):
+        if user.unlock(getpass.getpass("Mot de passe: ")):
             clear_screen()
             print("Connexion réussie!")
             from .home import home
@@ -36,6 +38,6 @@ def consol_login():
 
 def login(username: str, password: str) -> User|None:
     if (user := User.get_by_username(username)):
-        if user.verify_password(password):
+        if user.unlock(password):
             return user
     return None
