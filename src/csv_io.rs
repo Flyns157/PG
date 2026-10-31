@@ -108,7 +108,8 @@ fn parse_date(value: &str) -> std::result::Result<DateTime<Utc>, String> {
         .ok()
         .and_then(|date| Local.from_local_datetime(&date).earliest())
         .map(|date| date.with_timezone(&Utc))
-        .ok_or_else(|| format!("date invalide : {value}"))
+        // Sans la valeur : des colonnes décalées pourraient y placer un mot de passe.
+        .ok_or_else(|| "date invalide".to_owned())
 }
 
 #[cfg(test)]
@@ -168,6 +169,15 @@ mod tests {
         let records = read_entries(buffer.as_slice()).unwrap();
         assert!(records[0].fields == entry.fields);
         assert_eq!(records[0].created_at, now);
+    }
+
+    #[test]
+    fn date_error_does_not_echo_the_value() {
+        let csv = "url,key,password,date_added
+https://a,moi,p,mot-de-passe-decale
+";
+        let error = read_entries(csv.as_bytes()).err().unwrap().to_string();
+        assert!(!error.contains("mot-de-passe-decale"), "{error}");
     }
 
     #[test]

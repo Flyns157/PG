@@ -31,7 +31,7 @@ Touches de la TUI : `/` chercher, `v` afficher le mot de passe, `c` le copier, `
 
 - **Mot de passe maître :** il n'est jamais stocké. Argon2id (64 Mio, 3 passes) en dérive une clé qui protège une clé de coffre aléatoire.
 - **Entrées :** chacune est chiffrée entièrement avec XChaCha20-Poly1305, site et identifiant compris. La base ne révèle que les noms d'utilisateur et le nombre d'entrées de chacun.
-- **Session :** le coffre se verrouille après 5 minutes d'inactivité. Le presse-papiers est effacé après 30 secondes s'il contient encore le secret copié.
+- **Session :** le coffre se verrouille après 5 minutes d'inactivité. Le presse-papiers est effacé après 30 secondes s'il contient encore le secret copié. Sous Windows, les copies sont exclues de l'historique et de la synchronisation.
 
 Limites à connaître :
 
@@ -71,7 +71,7 @@ Limites à connaître :
 
 - Les mots de passe ne sont jamais renvoyés au client. Les sites, identifiants et **notes** le sont, et peuvent donc partir vers le fournisseur d'IA : ne gardez pas de secret dans les notes si vous activez le MCP.
 - `copy_password` ne demande pas de confirmation. Tout programme qui lit le presse-papiers peut lire le mot de passe copié.
-- Les appels MCP ne repoussent pas le verrouillage automatique. Un coffre verrouillé répond par une erreur, et le serveur reste actif jusqu'à ce que vous le désactiviez ou quittiez PG.
+- Les appels MCP ne repoussent pas le verrouillage automatique. Le verrouillage arrête le serveur : réactivez-le ensuite, ce qui crée un nouveau jeton.
 
 ## Développement
 

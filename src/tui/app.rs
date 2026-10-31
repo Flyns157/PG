@@ -4,6 +4,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use ratatui::Frame;
+use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -114,6 +115,7 @@ impl App {
 
     fn lock(&mut self) {
         self.workspace = None;
+        self.mcp = None;
         self.clipboard.clear();
         self.screen = login_screen();
         self.status = None;
@@ -440,6 +442,11 @@ impl App {
     }
 
     pub fn render(&self, frame: &mut Frame) {
+        self.draw(frame);
+        strip_terminal_controls(frame.buffer_mut());
+    }
+
+    fn draw(&self, frame: &mut Frame) {
         let status = self.status.as_ref().map(|(message, is_error)| {
             let color = if *is_error { Color::Red } else { Color::Green };
             Line::styled(message.clone(), Style::new().fg(color))
@@ -585,6 +592,24 @@ fn render_detail(frame: &mut Frame, area: Rect, entry: Option<&Entry>, revealed:
             .block(block),
         area,
     );
+}
+
+/// Un CSV importé ne doit pas pouvoir piloter le terminal : ratatui écrit ces caractères tels quels.
+fn strip_terminal_controls(buffer: &mut Buffer) {
+    for cell in &mut buffer.content {
+        if cell.symbol().chars().any(is_terminal_control) {
+            let clean: String = cell
+                .symbol()
+                .chars()
+                .filter(|&c| !is_terminal_control(c))
+                .collect();
+            cell.set_symbol(if clean.is_empty() { " " } else { &clean });
+        }
+    }
+}
+
+fn is_terminal_control(character: char) -> bool {
+    character.is_control() || matches!(character, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
 }
 
 const PASSWORD_FIELD: usize = 2;
@@ -752,6 +777,41 @@ mod tests {
         assert!(app.mcp.is_none());
         assert!(!screen(&app).contains("MCP actif"));
         assert!(std::net::TcpStream::connect(("127.0.0.1", mcp::PORT)).is_err());
+    }
+
+    fn assert_no_terminal_control(app: &App) {
+        let mut terminal = Terminal::new(TestBackend::new(140, 30)).unwrap();
+        terminal.draw(|frame| app.render(frame)).unwrap();
+        let symbols = terminal.backend().buffer().content().iter();
+        assert!(
+            symbols
+                .into_iter()
+                .all(|cell| !cell.symbol().chars().any(is_terminal_control))
+        );
+    }
+
+    #[test]
+    fn control_characters_never_reach_the_terminal() {
+        let mut app = registered_app();
+        add_entry(&mut app, "a\x1b]0;PWNED\x07b\u{202e}c", "p1");
+        assert_no_terminal_control(&app);
+        assert!(screen(&app).contains("]0;PWNED"));
+        press(&mut app, KeyCode::Char('e'));
+        assert_no_terminal_control(&app);
+    }
+
+    #[test]
+    fn locking_stops_the_mcp_server() {
+        let mut app = registered_app();
+        app.mcp = Some(McpServer::start_on(0, Box::new(|| {})).unwrap());
+        let url = app.mcp.as_ref().unwrap().url().to_owned();
+        let address = url
+            .trim_start_matches("http://")
+            .trim_end_matches("/mcp")
+            .to_owned();
+        press(&mut app, KeyCode::Char('l'));
+        assert!(app.mcp.is_none());
+        assert!(std::net::TcpStream::connect(address).is_err());
     }
 
     fn registered_app() -> App {

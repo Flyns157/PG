@@ -1,7 +1,7 @@
 //! Serveur MCP local, désactivé par défaut (transport HTTP, réponses JSON).
 //!
 //! Il n'écoute que sur 127.0.0.1 et exige un jeton renouvelé à chaque activation. Les appels
-//! sont exécutés par le fil de l'interface : un coffre verrouillé ne répond donc à aucun outil.
+//! sont exécutés par le fil de l'interface, et le verrouillage du coffre arrête le serveur.
 //! Un mot de passe ne sort jamais par ce serveur : il va seulement au presse-papiers.
 
 use std::io::{ErrorKind, Read, Write};
@@ -39,6 +39,7 @@ enum ToolCall {
 
 struct PendingCall {
     tool: ToolCall,
+    deadline: Instant,
     reply: Sender<Result<String, String>>,
 }
 
@@ -98,6 +99,10 @@ impl McpServer {
             return notices;
         };
         while let Ok(call) = calls.try_recv() {
+            // Le client a déjà reçu une erreur : l'appel ne doit plus avoir d'effet.
+            if Instant::now() >= call.deadline {
+                continue;
+            }
             let result = match workspace {
                 None => Err("Le coffre est verrouillé : déverrouillez-le dans PG".to_owned()),
                 Some(workspace) => run_tool(call.tool, workspace, &mut copy, &mut notices),
@@ -415,12 +420,16 @@ impl Connection {
     fn run_on_interface(&self, tool: ToolCall) -> Result<String, String> {
         let (reply, answer) = mpsc::channel();
         self.calls
-            .send(PendingCall { tool, reply })
+            .send(PendingCall {
+                tool,
+                deadline: Instant::now() + CALL_TIMEOUT,
+                reply,
+            })
             .map_err(|_| "Le serveur MCP s'arrête".to_owned())?;
         (self.waker)();
         answer
             .recv_timeout(CALL_TIMEOUT)
-            .map_err(|_| "PG ne répond pas : sa fenêtre est peut-être réduite".to_owned())?
+            .map_err(|_| "PG ne répond pas".to_owned())?
     }
 }
 
@@ -646,6 +655,26 @@ mod tests {
             &tool_call("search_entries", json!({})),
         );
         assert_eq!(answer["result"]["isError"], true);
+    }
+
+    #[test]
+    fn expired_call_has_no_effect() {
+        let server = server();
+        let workspace = workspace();
+        let id = workspace.all_entries()[0].id.clone();
+        let (url, token) = (server.url.clone(), server.token.clone());
+        let body = tool_call("copy_password", json!({ "id": id }));
+        let (status, answer) = thread::spawn(move || post(&url, &token, &body))
+            .join()
+            .unwrap();
+        assert_eq!(status, 200);
+        assert!(answer.contains("PG ne répond pas"));
+        let mut copied = Vec::new();
+        server.handle_pending(Some(&workspace), |text| {
+            copied.push(text.to_owned());
+            Ok(())
+        });
+        assert!(copied.is_empty());
     }
 
     #[test]

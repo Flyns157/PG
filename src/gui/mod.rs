@@ -122,6 +122,7 @@ impl GuiApp {
 
     fn lock(&mut self) {
         self.workspace = None;
+        self.mcp = None;
         self.dialog = None;
         self.dialog_error = None;
         self.search.clear();
@@ -945,6 +946,14 @@ mod tests {
         click(&mut harness, "Supprimer");
         click(&mut harness, "Confirmer la suppression");
         assert!(harness.state().entries().is_empty());
+    }
+
+    #[test]
+    fn locking_stops_the_mcp_server() {
+        let mut harness = registered();
+        harness.state_mut().mcp = Some(McpServer::start_on(0, Box::new(|| {})).unwrap());
+        click(&mut harness, "Verrouiller");
+        assert!(harness.state().mcp.is_none());
     }
 
     #[test]

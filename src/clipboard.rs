@@ -15,8 +15,8 @@ pub struct SecretClipboard {
 impl SecretClipboard {
     pub fn copy(&mut self, text: &str) -> Result<(), String> {
         let mut clipboard = arboard::Clipboard::new().map_err(|error| error.to_string())?;
-        clipboard
-            .set_text(text)
+        secret_setter(&mut clipboard)
+            .text(text)
             .map_err(|error| error.to_string())?;
         self.copied = Some((Zeroizing::new(text.to_owned()), Instant::now()));
         Ok(())
@@ -42,6 +42,22 @@ impl SecretClipboard {
             let _ = clipboard.clear();
         }
     }
+}
+
+/// Demande à Windows de garder le secret hors de son historique et de sa synchronisation.
+#[cfg(windows)]
+fn secret_setter(clipboard: &mut arboard::Clipboard) -> arboard::Set<'_> {
+    use arboard::SetExtWindows;
+    clipboard
+        .set()
+        .exclude_from_monitoring()
+        .exclude_from_cloud()
+        .exclude_from_history()
+}
+
+#[cfg(not(windows))]
+fn secret_setter(clipboard: &mut arboard::Clipboard) -> arboard::Set<'_> {
+    clipboard.set()
 }
 
 impl Drop for SecretClipboard {
