@@ -1,0 +1,17 @@
+# Appliqué automatiquement par `docker compose` en local, jamais en production.
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  backend:
+    ports:
+      - "127.0.0.1:8000:8000"
+    command: ["fastapi", "dev", "--host", "0.0.0.0", "--port", "8000"]
+    develop:
+      watch:
+        - path: ./backend/app
+          action: sync
+          target: /app/app
+        - path: ./backend/uv.lock
+          action: rebuild

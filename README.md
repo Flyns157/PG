@@ -1,109 +1,113 @@
-# API de Gestion de Mots de Passe
+# PG API
 
-Une API RESTful sécurisée pour la gestion de vos mots de passe, construite avec FastAPI, SQLAlchemy et Pydantic.
+API de coffre-fort pour mots de passe, construite avec FastAPI, SQLAlchemy 2 et PostgreSQL.
 
-## Fonctionnalites
+Le serveur fonctionne à **connaissance nulle** : il ne reçoit ni le mot de passe maître, ni la clé de chiffrement, ni le contenu des entrées. Le nom du service, l'identifiant, le secret et les notes sont tous dans le texte chiffré. La recherche se fait donc côté client.
 
-- Authentification JWT avec tokens a expiration
-- Hachage bcrypt pour les mots de passe utilisateur
-- CRUD complet pour les entrees de mots de passe
-- Isolation des donnees par utilisateur
-- Documentation automatique avec Swagger UI
+## Contrat de chiffrement côté client
 
-## Prerequis
+| Étape | Traitement |
+| --- | --- |
+| Dérivation | `scrypt(mot de passe maître, sel, n, r, p, dklen=64)` |
+| Clé de chiffrement | 32 premiers octets, jamais envoyés |
+| Vérificateur | 32 derniers octets en hexadécimal, envoyés comme `auth_verifier` à l'inscription et comme `password` à la connexion |
+| Entrée | AES-256-GCM avec un nonce aléatoire de 12 octets par écriture ; texte chiffré (tag inclus) et nonce en base64 |
 
-- Python 3.13+
-- Docker (optionnel)
+Coût minimal imposé : `n = 2^15`, `r = 8`, `p = 1`.
 
-## Installation Locale
+**Conséquence :** un mot de passe maître perdu rend le coffre illisible. L'API ne propose donc aucune récupération de compte.
 
-```bash
-# Creation de l'environnement virtuel
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# ou
-venv\Scripts\activate  # Windows
+## Parcours
 
-# Installation des dependances
-pip install -r requirements.txt
-
-# Lancement du serveur
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-## Installation avec Docker
-
-```bash
-# Construction de l'image
-docker build -t password-manager:latest .
-
-# Lancement du conteneur
-docker run -d -p 8000:8000 --name pm-api password-manager:latest
-```
+1. **Inscription :** le client génère un sel de 16 octets, dérive ses clés, puis appelle `POST /users/signup`.
+2. **Connexion :** le client récupère le sel avec `POST /login/parameters`, dérive ses clés, puis appelle `POST /login/access-token`.
+3. **Coffre :** le client chiffre et déchiffre localement, et échange des entrées opaques avec `/vault-entries/`.
 
 ## Endpoints
 
-| Methode | Endpoint               | Description               |
-| ------- | ---------------------- | ------------------------- |
-| POST    | /api/v1/auth/signup    | Inscription               |
-| POST    | /api/v1/auth/login     | Connexion                 |
-| GET     | /api/v1/passwords/     | Liste des mots de passe   |
-| POST    | /api/v1/passwords/     | Creer un mot de passe     |
-| GET     | /api/v1/passwords/{id} | Recuperer un mot de passe |
-| PUT     | /api/v1/passwords/{id} | Modifier un mot de passe  |
-| DELETE  | /api/v1/passwords/{id} | Supprimer un mot de passe |
+Tous sont préfixés par `/api/v1`. La documentation interactive est disponible sur `/docs`.
 
-## Documentation
+| Méthode | Chemin | Description |
+| --- | --- | --- |
+| POST | `/login/parameters` | Paramètres de dérivation d'un compte |
+| POST | `/login/access-token` | Connexion OAuth2, renvoie un JWT |
+| POST | `/users/signup` | Inscription |
+| GET | `/users/me` | Compte connecté |
+| DELETE | `/users/me` | Supprime le compte et son coffre |
+| GET, POST | `/vault-entries/` | Liste paginée, création |
+| GET, PUT, DELETE | `/vault-entries/{id}` | Lecture, remplacement, suppression |
+| GET | `/utils/health-check` | Sonde de disponibilité |
 
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+## Développement
 
-## Configuration
-
-Le fichier `.env` contient les variables de configuration :
-
-```env
-DATABASE_URL=sqlite:///./password_manager.db
-SECRET_KEY=votre_cle_secrete
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-```
-
-## Structure du Projet
-
-```
-password_manager/
-├── app/
-│   ├── core/          # Configuration et securite
-│   ├── database/      # Session SQLAlchemy
-│   ├── models/        # Models de donnees
-│   ├── routers/       # Endpoints API
-│   ├── schemas/       # Validation Pydantic
-│   └── services/      # Logique metier
-├── tests/
-├── Dockerfile
-├── requirements.txt
-└── .env
-```
-
-## Lancer les Tests
+Prérequis : [uv](https://docs.astral.sh/uv/) et Docker.
 
 ```bash
-# Installation des dependances de test
-pip install pytest pytest-cov httpx
-
-# Lancer tous les tests
-pytest tests/ -v
-
-# Lancer avec coverage
-pytest --cov=app --cov-report=term-missing tests/
-
-# Lancer une categorie specifique
-pytest tests/test_api/ -v
-pytest tests/test_unit/test_security.py -v
+cp .env.example .env
 ```
 
-## E
+Remplacez ensuite chaque `changethis` dans `.env`, puis lancez la base et l'API :
+
+```bash
+docker compose up -d db
+```
+
+```bash
+cd backend
+uv sync
+uv run bash scripts/prestart.sh
+uv run fastapi dev
+```
+
+Pour tout lancer dans Docker :
+
+```bash
+docker compose watch
+```
+
+## Vérifications
+
+Depuis `backend/` :
+
+```bash
+uv run bash scripts/lint.sh
+```
+
+```bash
+uv run bash scripts/test.sh
+```
+
+Les tests utilisent une base SQLite temporaire, ou celle de `TEST_DATABASE_URL` si elle est définie, jamais `DATABASE_URL`. La CI les exécute sur PostgreSQL, avec un seuil de couverture de 90 %. **La base désignée par `TEST_DATABASE_URL` est vidée à chaque test.**
+
+Après une modification des modèles :
+
+```bash
+uv run alembic revision --autogenerate -m "description"
+```
+
+## Structure
+
+```text
+backend/
+├── app/
+│   ├── main.py      # assemblage de l'application
+│   ├── api/         # routes, dépendances, traduction des erreurs en HTTP
+│   ├── core/        # configuration, base, sécurité, erreurs métier
+│   ├── models/      # tables SQLAlchemy
+│   ├── schemas/     # contrats d'entrée et de sortie
+│   ├── services/    # logique métier, sans dépendance HTTP
+│   └── alembic/     # migrations
+├── scripts/
+└── tests/
+```
+
+## Limites connues
+
+- **Limitation de débit :** les compteurs sont en mémoire et par processus, d'où un seul worker dans l'image. Pour passer à plusieurs instances, il faut un stockage partagé comme Redis.
+- **Proxy :** le débit est compté par adresse du client directe. Derrière un proxy, configurez `--forwarded-allow-ips` pour obtenir la vraie adresse.
+- **Inscription :** la réponse 409 révèle qu'une adresse est déjà prise, faute de vérification par email.
+- **Mot de passe maître :** le changer impose de rechiffrer tout le coffre ; ce parcours n'existe pas encore.
+- **Jetons :** il n'y a pas de refresh token, le client se reconnecte à l'expiration.
 
 ## Licence
 

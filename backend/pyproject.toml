@@ -1,0 +1,73 @@
+[project]
+name = "pg-api"
+version = "2.0.0"
+description = "API de coffre-fort à connaissance nulle pour PG"
+requires-python = ">=3.13,<4.0"
+dependencies = [
+    "alembic>=1.16,<2.0",
+    "email-validator>=2.2,<3.0",
+    "fastapi[standard]>=0.115,<1.0",
+    "psycopg[binary]>=3.2,<4.0",
+    "pwdlib[argon2,bcrypt]>=0.2.1,<1.0",
+    "pydantic>=2.10,<3.0",
+    "pydantic-settings>=2.6,<3.0",
+    "pyjwt>=2.10,<3.0",
+    "slowapi>=0.1.9,<1.0",
+    "sqlalchemy>=2.0.36,<3.0",
+]
+
+[dependency-groups]
+dev = [
+    "coverage>=7.6,<8.0",
+    "mypy>=1.13,<3.0",
+    "pre-commit>=4.0,<5.0",
+    "pytest>=8.3,<10.0",
+    "ruff>=0.8,<1.0",
+    "zizmor>=1.0,<2.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
+exclude = ["\\.venv", "app/alembic"]
+
+[[tool.mypy.overrides]]
+module = "slowapi.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Les décorateurs de slowapi ne sont pas typés.
+module = "app.api.routes.*"
+disallow_untyped_decorators = false
+
+[tool.ruff]
+target-version = "py313"
+exclude = ["app/alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "ARG001", "T201", "S"]
+ignore = [
+    "E501",  # longueur gérée par ruff format
+    "B008",  # Depends() dans les valeurs par défaut
+    "B904",  # HTTPException sans `from`
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/alembic/*"]
+
+[tool.coverage.report]
+show_missing = true
+sort = "-Cover"
+
+[tool.fastapi]
+entrypoint = "app.main:app"

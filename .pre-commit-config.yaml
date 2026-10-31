@@ -1,0 +1,35 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --project backend ruff check --config backend/pyproject.toml --force-exclude --fix --exit-non-zero-on-fix
+        language: system
+        require_serial: true
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --project backend ruff format --config backend/pyproject.toml --force-exclude --exit-non-zero-on-format
+        language: system
+        require_serial: true
+        types: [python]
+      - id: mypy
+        name: mypy
+        entry: bash -c 'cd backend && uv run mypy app tests'
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: zizmor
+        name: zizmor
+        entry: uv run --project backend zizmor .github/workflows
+        language: system
+        pass_filenames: false
+        files: ^\.github/workflows/
