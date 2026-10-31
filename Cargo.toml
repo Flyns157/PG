@@ -11,6 +11,9 @@ default = ["tui", "gui"]
 tui = ["dep:ratatui"]
 gui = ["dep:eframe"]
 
+[build-dependencies]
+winresource = "0.1"
+
 [profile.release]
 lto = "thin"
 strip = true

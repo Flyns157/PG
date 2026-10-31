@@ -24,12 +24,17 @@ const TICK: Duration = Duration::from_secs(1);
 const LOGIN_FORM_WIDTH: f32 = 450.0;
 const LIST_ROW_HEIGHT: f32 = 26.0;
 
+const ICON_PNG: &[u8] = include_bytes!("../../assets/icon.png");
+
 pub fn run(store: Store) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("PG")
             .with_inner_size([960.0, 600.0])
-            .with_min_inner_size([640.0, 400.0]),
+            .with_min_inner_size([640.0, 400.0])
+            .with_icon(
+                eframe::icon_data::from_png_bytes(ICON_PNG).expect("icône intégrée invalide"),
+            ),
         ..Default::default()
     };
     eframe::run_native(
@@ -696,6 +701,12 @@ mod tests {
     use egui_kittest::kittest::Queryable;
 
     const MASTER: &str = "correct horse battery";
+
+    #[test]
+    fn embedded_icon_is_a_valid_image() {
+        let icon = eframe::icon_data::from_png_bytes(ICON_PNG).unwrap();
+        assert_eq!((icon.width, icon.height), (57, 57));
+    }
 
     fn harness<'a>() -> Harness<'a, GuiApp> {
         let store = Store::open_in_memory().unwrap().with_kdf(FAST_KDF);
