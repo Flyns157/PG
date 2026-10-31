@@ -111,11 +111,7 @@ impl Store {
 
     pub fn register(&self, username: &str, password: &str) -> Result<Session> {
         let username = username.trim();
-        if !(3..=50).contains(&username.chars().count()) {
-            return Err(Error::Validation(
-                "Le nom d'utilisateur doit faire de 3 à 50 caractères".into(),
-            ));
-        }
+        validate_username(username)?;
         validate_master_password(password)?;
         let taken: bool = self.conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM users WHERE username = ?1)",
@@ -300,6 +296,15 @@ impl Store {
         transaction.commit()?;
         Ok(report)
     }
+}
+
+pub fn validate_username(username: &str) -> Result<()> {
+    if !(3..=50).contains(&username.trim().chars().count()) {
+        return Err(Error::Validation(
+            "Le nom d'utilisateur doit faire de 3 à 50 caractères".into(),
+        ));
+    }
+    Ok(())
 }
 
 pub fn validate_master_password(password: &str) -> Result<()> {

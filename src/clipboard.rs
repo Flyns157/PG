@@ -14,12 +14,14 @@ pub struct SecretClipboard {
 
 impl SecretClipboard {
     pub fn copy(&mut self, text: &str) -> Result<(), String> {
-        let mut clipboard = arboard::Clipboard::new().map_err(|error| error.to_string())?;
-        secret_setter(&mut clipboard)
-            .text(text)
-            .map_err(|error| error.to_string())?;
+        write_secret(text)?;
         self.copied = Some((Zeroizing::new(text.to_owned()), Instant::now()));
         Ok(())
+    }
+
+    #[cfg(all(test, feature = "gui"))]
+    pub(crate) fn copied_text(&self) -> Option<&str> {
+        self.copied.as_ref().map(|(text, _)| text.as_str())
     }
 
     /// Renvoie vrai si le délai vient d'effacer le secret du presse-papiers.
@@ -44,8 +46,22 @@ impl SecretClipboard {
     }
 }
 
+#[cfg(not(test))]
+fn write_secret(text: &str) -> Result<(), String> {
+    let mut clipboard = arboard::Clipboard::new().map_err(|error| error.to_string())?;
+    secret_setter(&mut clipboard)
+        .text(text)
+        .map_err(|error| error.to_string())
+}
+
+// Les tests ne doivent pas écraser le presse-papiers de la personne qui les lance.
+#[cfg(test)]
+fn write_secret(_text: &str) -> Result<(), String> {
+    Ok(())
+}
+
 /// Demande à Windows de garder le secret hors de son historique et de sa synchronisation.
-#[cfg(windows)]
+#[cfg(all(windows, not(test)))]
 fn secret_setter(clipboard: &mut arboard::Clipboard) -> arboard::Set<'_> {
     use arboard::SetExtWindows;
     clipboard
@@ -55,7 +71,7 @@ fn secret_setter(clipboard: &mut arboard::Clipboard) -> arboard::Set<'_> {
         .exclude_from_history()
 }
 
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(test)))]
 fn secret_setter(clipboard: &mut arboard::Clipboard) -> arboard::Set<'_> {
     clipboard.set()
 }

@@ -2,7 +2,8 @@
 
 mod theme;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 
 use eframe::egui;
@@ -16,11 +17,11 @@ use zeroize::Zeroizing;
 use crate::IDLE_LOCK;
 use crate::clipboard::SecretClipboard;
 use crate::csv_io;
-use crate::entry::EntryFields;
+use crate::entry::{Entry, EntryFields};
 use crate::error::{Error, Result};
 use crate::generator::{DEFAULT_LENGTH, generate_password};
 use crate::mcp::{self, McpServer};
-use crate::store::Store;
+use crate::store::{Store, validate_master_password, validate_username};
 use crate::workspace::Workspace;
 use theme::{icon, palette};
 
@@ -38,6 +39,13 @@ const DIALOG_WIDTH: f32 = 460.0;
 const DIALOG_BUTTON_WIDTH: f32 = 130.0;
 const EMPTY_STATE_BUTTON_WIDTH: f32 = 170.0;
 const PASSWORD_TOOLS_WIDTH: f32 = 190.0;
+// Bouton « Parcourir… », marges du champ et espacement.
+const BROWSE_BUTTON_WIDTH: f32 = 116.0;
+// Marges de la fenêtre, boutons, message d'erreur et question d'abandon.
+const DIALOG_CHROME_HEIGHT: f32 = 150.0;
+const SEARCH_ID: &str = "search";
+const COPIED_PASSWORD: &str = "Mot de passe copié (effacé dans 30 s)";
+const COPIED_USERNAME: &str = "Identifiant copié (effacé dans 30 s)";
 
 const ICON_PNG: &[u8] = include_bytes!("../../assets/icon.png");
 
@@ -68,6 +76,7 @@ struct LoginForm {
     password: Zeroizing<String>,
     confirm: Zeroizing<String>,
     registering: bool,
+    attempted: bool,
 }
 
 enum Dialog {
@@ -107,6 +116,13 @@ impl Dialog {
             path: String::new(),
         }
     }
+
+    fn delete(entry: &Entry) -> Self {
+        Self::Delete {
+            id: entry.id.clone(),
+            site: entry.fields.url.clone(),
+        }
+    }
 }
 
 enum DialogAction {
@@ -129,7 +145,10 @@ struct GuiApp {
     dialog_error: Option<String>,
     dialog_focused: bool,
     discard_prompt: bool,
+    dialog_attempted: bool,
+    file_picker: Option<Receiver<Option<PathBuf>>>,
     login_focus: bool,
+    focus_search: bool,
     last_activity: Instant,
 }
 
@@ -154,7 +173,10 @@ impl GuiApp {
             dialog_error: None,
             dialog_focused: false,
             discard_prompt: false,
+            dialog_attempted: false,
+            file_picker: None,
             login_focus: true,
+            focus_search: false,
             last_activity: Instant::now(),
         }
     }
@@ -244,13 +266,31 @@ impl GuiApp {
         );
         ui.add_space(12.0);
         let mut submitted = false;
+        // Les règles de création ne concernent pas la connexion à un compte existant.
+        let [username_error, password_error, confirm_error] = if registering {
+            registration_errors(&self.login)
+        } else {
+            [None, None, None]
+        };
+        let mut form = FormFields {
+            attempted: self.login.attempted,
+            focus: std::mem::take(&mut self.login_focus),
+        };
         let username = text_input(ui, "Utilisateur", &mut self.login.username);
-        if std::mem::take(&mut self.login_focus) {
-            username.request_focus();
-        }
+        let username_entered = form.check(
+            ui,
+            &username,
+            !self.login.username.is_empty(),
+            username_error.as_deref(),
+        );
         let password = secret_input(ui, "Mot de passe maître", &mut self.login.password);
-        submitted |= entered(&password);
-        if entered(&username) {
+        submitted |= form.check(
+            ui,
+            &password,
+            !self.login.password.is_empty(),
+            password_error.as_deref(),
+        );
+        if username_entered {
             if self.login.password.is_empty() {
                 password.request_focus();
             } else {
@@ -258,7 +298,13 @@ impl GuiApp {
             }
         }
         if registering {
-            submitted |= entered(&secret_input(ui, "Confirmer", &mut self.login.confirm));
+            let confirm = secret_input(ui, "Confirmer", &mut self.login.confirm);
+            submitted |= form.check(
+                ui,
+                &confirm,
+                !self.login.confirm.is_empty(),
+                confirm_error.as_deref(),
+            );
         }
         ui.add_space(4.0);
         submitted |= primary_button(
@@ -279,6 +325,7 @@ impl GuiApp {
             };
             if ui.link(other).clicked() {
                 self.login.registering = !registering;
+                self.login.attempted = false;
                 self.login_focus = true;
                 self.status = None;
             }
@@ -290,12 +337,13 @@ impl GuiApp {
     }
 
     fn submit_login(&mut self) {
+        if self.login.registering && registration_errors(&self.login).iter().any(Option::is_some) {
+            self.login.attempted = true;
+            self.login_focus = true;
+            return;
+        }
         let form = &self.login;
         let session = if form.registering {
-            if *form.password != *form.confirm {
-                self.set_error(mismatch());
-                return;
-            }
             self.store.register(&form.username, &form.password)
         } else {
             self.store.login(&form.username, &form.password)
@@ -306,12 +354,67 @@ impl GuiApp {
                 self.login = LoginForm::default();
                 self.status = None;
                 self.last_activity = Instant::now();
+                self.focus_search = true;
             }
             Err(error) => self.set_error(error),
         }
     }
 
+    /// Le parcours principal se fait depuis la recherche : les raccourcis y restent actifs,
+    /// sauf quand la touche a déjà un sens pour le texte saisi ou sélectionné.
+    fn shortcuts(&mut self, ctx: &Context) {
+        if self.dialog.is_some() {
+            return;
+        }
+        let search_id = egui::Id::new(SEARCH_ID);
+        let search_focused = ctx.memory(|memory| memory.has_focus(search_id));
+        let search_selected = search_focused
+            && TextEdit::load_state(ctx, search_id)
+                .and_then(|state| state.cursor.char_range())
+                .is_some_and(|range| !range.is_empty());
+        let label_selected = egui::text_selection::LabelSelectionState::load(ctx).has_selection();
+        let can_delete = !search_focused || self.search.is_empty();
+        // egui-winit transforme Ctrl+C en `Event::Copy`, sans événement de touche.
+        let copy_password = !search_selected
+            && !label_selected
+            && ctx.input(|input| {
+                input
+                    .events
+                    .iter()
+                    .any(|event| matches!(event, egui::Event::Copy))
+            });
+        let (copy_username, add, delete) = ctx.input_mut(|input| {
+            (
+                input.consume_key(Modifiers::COMMAND, Key::B),
+                input.consume_key(Modifiers::COMMAND, Key::N),
+                can_delete && input.consume_key(Modifiers::NONE, Key::Delete),
+            )
+        });
+        if add {
+            self.dialog = Some(Dialog::new_entry());
+            return;
+        }
+        let Some(entry) = self
+            .workspace
+            .as_ref()
+            .and_then(|workspace| workspace.selected())
+            .cloned()
+        else {
+            return;
+        };
+        if copy_password {
+            self.copy(&entry.fields.password, COPIED_PASSWORD);
+        }
+        if copy_username {
+            self.copy(&entry.fields.username, COPIED_USERNAME);
+        }
+        if delete {
+            self.dialog = Some(Dialog::delete(&entry));
+        }
+    }
+
     fn vault_ui(&mut self, ctx: &Context) {
+        self.shortcuts(ctx);
         let pane = |top: i8, bottom: i8| {
             Frame::new()
                 .fill(ctx.style().visuals.panel_fill)
@@ -333,6 +436,8 @@ impl GuiApp {
                 .show(ctx, |ui| info_bar(ui, self.status.as_ref()));
         }
         egui::SidePanel::left("entries")
+            // La poignée, invisible sans ligne de séparation, serait une étape de tabulation vide.
+            .resizable(false)
             .default_width(380.0)
             .frame(pane(0, 12))
             .show_separator_line(false)
@@ -355,11 +460,12 @@ impl GuiApp {
                             .truncate(),
                     );
                 });
-                lock = icon_button(ui, icon::LOCK, "Verrouiller").clicked();
+                lock = icon_button(ui, icon::LOCK, "Verrouiller", "Verrouiller").clicked();
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     let search = ui
                         .add(
                             TextEdit::singleline(&mut self.search)
+                                .id(egui::Id::new(SEARCH_ID))
                                 .desired_width(220.0)
                                 .margin(vec2(10.0, 6.0)),
                         )
@@ -367,7 +473,8 @@ impl GuiApp {
                     let label = ui.label("Recherche");
                     let search = search.labelled_by(label.id);
                     if self.dialog.is_none()
-                        && ui.input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::F))
+                        && (std::mem::take(&mut self.focus_search)
+                            || ui.input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::F)))
                     {
                         search.request_focus();
                     }
@@ -386,7 +493,10 @@ impl GuiApp {
             ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
-                if command_button(ui, icon::ADD, "Ajouter", false).clicked() {
+                if command_button(ui, icon::ADD, "Ajouter", false)
+                    .on_hover_text("Ctrl+N")
+                    .clicked()
+                {
                     self.dialog = Some(Dialog::new_entry());
                 }
                 if command_button(ui, icon::IMPORT, "Importer", false).clicked() {
@@ -495,11 +605,11 @@ impl GuiApp {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     // Disposition de droite à gauche : le dernier ajouté s'affiche en premier.
                     let danger = palette(ui).danger;
-                    if command_button_with(ui, icon::DELETE, "Supprimer", false, danger).clicked() {
-                        self.dialog = Some(Dialog::Delete {
-                            id: entry.id.clone(),
-                            site: fields.url.clone(),
-                        });
+                    if command_button_with(ui, icon::DELETE, "Supprimer", false, danger)
+                        .on_hover_text("Suppr")
+                        .clicked()
+                    {
+                        self.dialog = Some(Dialog::delete(&entry));
                     }
                     if command_button(ui, icon::EDIT, "Modifier", false).clicked() {
                         self.dialog = Some(Dialog::Entry {
@@ -524,8 +634,14 @@ impl GuiApp {
                     ui,
                     "Identifiant",
                     |ui| {
-                        if icon_button(ui, icon::COPY, "Copier l'identifiant").clicked() {
-                            self.copy(&fields.username, "Identifiant copié (effacé dans 30 s)");
+                        let copy = icon_button(
+                            ui,
+                            icon::COPY,
+                            "Copier l'identifiant",
+                            "Copier l'identifiant (Ctrl+B)",
+                        );
+                        if copy.clicked() {
+                            self.copy(&fields.username, COPIED_USERNAME);
                         }
                     },
                     |ui| detail_value(ui, &fields.username),
@@ -535,15 +651,21 @@ impl GuiApp {
                     "Mot de passe",
                     |ui| {
                         // Disposition de droite à gauche : le dernier ajouté s'affiche en premier.
-                        if icon_button(ui, icon::COPY, "Copier le mot de passe").clicked() {
-                            self.copy(&fields.password, "Mot de passe copié (effacé dans 30 s)");
+                        let copy = icon_button(
+                            ui,
+                            icon::COPY,
+                            "Copier le mot de passe",
+                            "Copier le mot de passe (Ctrl+C)",
+                        );
+                        if copy.clicked() {
+                            self.copy(&fields.password, COPIED_PASSWORD);
                         }
                         let (glyph, label) = if revealed {
                             (icon::HIDE, "Masquer")
                         } else {
                             (icon::SHOW, "Afficher")
                         };
-                        if icon_button(ui, glyph, label).clicked() {
+                        if icon_button(ui, glyph, label, label).clicked() {
                             self.revealed = !revealed;
                         }
                     },
@@ -622,6 +744,7 @@ impl GuiApp {
         let Some(mut dialog) = self.dialog.take() else {
             return;
         };
+        self.poll_file_picker(&mut dialog);
         let focus_first = !std::mem::replace(&mut self.dialog_focused, true);
         if ctx.input(|input| input.key_pressed(Key::Escape)) {
             if self.discard_prompt {
@@ -637,9 +760,24 @@ impl GuiApp {
         let error = self.dialog_error.clone();
         let discard_prompt = self.discard_prompt;
         let mut keep_editing = false;
+        let attempted = self.dialog_attempted;
+        let picking = self.file_picker.is_some();
+        let mut browse = false;
         let modal = Modal::new(egui::Id::new("dialog")).show(ctx, |ui| {
             ui.set_width(DIALOG_WIDTH);
-            let mut action = dialog_content(ui, &mut dialog, focus_first);
+            let mut form = FormFields {
+                attempted,
+                focus: focus_first,
+            };
+            // Sur une petite fenêtre, le formulaire défile et les boutons restent visibles.
+            let max_height = ui.ctx().screen_rect().height() - DIALOG_CHROME_HEIGHT;
+            let mut action = ScrollArea::vertical()
+                .max_height(max_height)
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    dialog_content(ui, &mut dialog, &mut form, picking, &mut browse)
+                })
+                .inner;
             if let Some(error) = &error {
                 ui.label(RichText::new(error).color(palette(ui).danger));
             }
@@ -677,8 +815,17 @@ impl GuiApp {
             self.discard_prompt = false;
             self.dialog_focused = false;
         }
+        if browse {
+            self.start_file_picker(ctx, &dialog);
+        }
         match modal.inner {
             DialogAction::Keep => self.dialog = Some(dialog),
+            DialogAction::Submit if !dialog_is_valid(&dialog) => {
+                self.dialog_error = None;
+                self.dialog_attempted = true;
+                self.dialog_focused = false;
+                self.dialog = Some(dialog);
+            }
             DialogAction::Close => self.close_dialog(),
             DialogAction::Submit => match self.submit_dialog(&dialog) {
                 Ok(message) => {
@@ -687,6 +834,7 @@ impl GuiApp {
                 }
                 Err(error) => {
                     self.dialog_error = Some(error.to_string());
+                    self.dialog_attempted = false;
                     self.dialog_focused = false;
                     self.discard_prompt = false;
                     self.dialog = Some(dialog);
@@ -699,6 +847,46 @@ impl GuiApp {
         self.dialog_error = None;
         self.dialog_focused = false;
         self.discard_prompt = false;
+        self.dialog_attempted = false;
+        self.file_picker = None;
+        self.focus_search = true;
+    }
+
+    /// La fenêtre de Windows tourne à part : l'interface continue de vivre, verrouillage
+    /// automatique compris. Son résultat est ignoré si le dialogue a été fermé entre-temps.
+    fn start_file_picker(&mut self, ctx: &Context, dialog: &Dialog) {
+        let saving = matches!(dialog, Dialog::Export { .. });
+        let (sender, receiver) = mpsc::channel();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let picker = rfd::FileDialog::new().add_filter("CSV", &["csv"]);
+            let path = if saving {
+                picker.set_file_name("pg-export.csv").save_file()
+            } else {
+                picker.pick_file()
+            };
+            let _ = sender.send(path);
+            ctx.request_repaint();
+        });
+        self.file_picker = Some(receiver);
+    }
+
+    fn poll_file_picker(&mut self, dialog: &mut Dialog) {
+        let Some(receiver) = &self.file_picker else {
+            return;
+        };
+        match receiver.try_recv() {
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => self.file_picker = None,
+            Ok(picked) => {
+                self.file_picker = None;
+                if let (Some(picked), Dialog::Import { path } | Dialog::Export { path }) =
+                    (picked, dialog)
+                {
+                    *path = picked.to_string_lossy().into_owned();
+                }
+            }
+        }
     }
 
     fn dialog_is_dirty(&self, dialog: &Dialog) -> bool {
@@ -767,6 +955,11 @@ impl GuiApp {
                 )
             }
             Dialog::Export { path } => {
+                if Path::new(path).exists() {
+                    return Err(Error::Validation(
+                        "Ce fichier existe déjà : choisissez un autre nom".to_owned(),
+                    ));
+                }
                 csv_io::export_to_file(workspace.all_entries(), Path::new(path))?;
                 format!("Export EN CLAIR écrit dans {path}")
             }
@@ -786,13 +979,87 @@ impl eframe::App for GuiApp {
     }
 }
 
-fn dialog_content(ui: &mut Ui, dialog: &mut Dialog, focus_first: bool) -> DialogAction {
-    let mut submitted = false;
-    let focus = |response: &Response| {
-        if focus_first {
+/// État partagé par les champs d'un formulaire : focus initial et affichage des erreurs.
+struct FormFields {
+    attempted: bool,
+    focus: bool,
+}
+
+impl FormFields {
+    /// Une erreur s'affiche après une tentative de validation, ou quand on quitte un champ rempli
+    /// pour ne pas interrompre la saisie. Après une tentative, le focus va à la première erreur.
+    /// Renvoie vrai si la touche Entrée vient de valider le champ.
+    fn check(
+        &mut self,
+        ui: &mut Ui,
+        response: &Response,
+        filled: bool,
+        error: Option<&str>,
+    ) -> bool {
+        if self.focus && (!self.attempted || error.is_some()) {
             response.request_focus();
+            self.focus = false;
         }
-    };
+        if let Some(error) = error
+            && (self.attempted || (filled && !response.has_focus()))
+        {
+            ui.label(RichText::new(error).small().color(palette(ui).danger));
+        }
+        entered(response)
+    }
+}
+
+fn master_errors(current: &str, new: &str, confirm: &str) -> [Option<String>; 3] {
+    [
+        current
+            .is_empty()
+            .then(|| "Le mot de passe actuel est obligatoire".to_owned()),
+        validate_master_password(new)
+            .err()
+            .map(|error| error.to_string()),
+        (new != confirm).then(|| mismatch().to_string()),
+    ]
+}
+
+fn registration_errors(form: &LoginForm) -> [Option<String>; 3] {
+    [
+        validate_username(&form.username)
+            .err()
+            .map(|error| error.to_string()),
+        validate_master_password(&form.password)
+            .err()
+            .map(|error| error.to_string()),
+        (*form.password != *form.confirm).then(|| mismatch().to_string()),
+    ]
+}
+
+fn path_error(path: &str) -> Option<&'static str> {
+    path.trim().is_empty().then_some("Indiquez un fichier")
+}
+
+fn dialog_is_valid(dialog: &Dialog) -> bool {
+    match dialog {
+        Dialog::Entry { fields, .. } => fields.validate().is_ok(),
+        Dialog::Delete { .. } => true,
+        Dialog::ChangeMaster {
+            current,
+            new,
+            confirm,
+        } => master_errors(current, new, confirm)
+            .iter()
+            .all(Option::is_none),
+        Dialog::Import { path } | Dialog::Export { path } => path_error(path).is_none(),
+    }
+}
+
+fn dialog_content(
+    ui: &mut Ui,
+    dialog: &mut Dialog,
+    form: &mut FormFields,
+    picking: bool,
+    browse: &mut bool,
+) -> DialogAction {
+    let mut submitted = false;
     match dialog {
         Dialog::Entry {
             id,
@@ -805,30 +1072,43 @@ fn dialog_content(ui: &mut Ui, dialog: &mut Dialog, focus_first: bool) -> Dialog
                 "Nouvelle entrée"
             });
             ui.add_space(4.0);
-            let site = text_input(ui, "Site", &mut fields.url);
-            focus(&site);
-            submitted |= entered(&site);
-            submitted |= entered(&text_input(ui, "Identifiant", &mut fields.username));
-            let label = ui.label("Mot de passe");
-            ui.horizontal(|ui| {
-                let password = ui
-                    .add(
-                        TextEdit::singleline(&mut fields.password)
-                            .password(!*revealed)
-                            .desired_width(ui.available_width() - PASSWORD_TOOLS_WIDTH)
-                            .margin(vec2(10.0, 6.0)),
-                    )
-                    .labelled_by(label.id);
-                submitted |= entered(&password);
-                ui.checkbox(revealed, "Afficher");
-                if ui.button("Générer").clicked() {
-                    fields.password = generate_password(DEFAULT_LENGTH);
-                    *revealed = true;
-                }
-            });
-            submitted |= entered(&text_input(ui, "E-mail", &mut fields.email));
+            let error = fields.url_error();
+            let site = required_input(ui, "Site", &mut fields.url);
+            submitted |= form.check(ui, &site, !fields.url.is_empty(), error);
+            let error = fields.username_error();
+            let username = required_input(ui, "Identifiant", &mut fields.username);
+            submitted |= form.check(ui, &username, !fields.username.is_empty(), error);
+            let label = field_label(ui, "Mot de passe", true);
+            let password = ui
+                .horizontal(|ui| {
+                    let password = ui
+                        .add(
+                            TextEdit::singleline(&mut fields.password)
+                                .password(!*revealed)
+                                .desired_width(ui.available_width() - PASSWORD_TOOLS_WIDTH)
+                                .margin(vec2(10.0, 6.0)),
+                        )
+                        .labelled_by(label.id);
+                    ui.checkbox(revealed, "Afficher");
+                    if ui.button("Générer").clicked() {
+                        fields.password = generate_password(DEFAULT_LENGTH);
+                        *revealed = true;
+                    }
+                    password
+                })
+                .inner;
+            let error = fields.password_error();
+            submitted |= form.check(ui, &password, !fields.password.is_empty(), error);
+            let error = fields.email_error();
+            let email = text_input(ui, "E-mail", &mut fields.email);
+            submitted |= form.check(ui, &email, !fields.email.is_empty(), error);
             submitted |= entered(&text_input(ui, "Téléphone", &mut fields.phone));
             submitted |= entered(&text_input(ui, "Notes", &mut fields.notes));
+            ui.label(
+                RichText::new("* Champ obligatoire")
+                    .small()
+                    .color(palette(ui).secondary),
+            );
         }
         Dialog::Delete { site, .. } => {
             ui.heading("Supprimer l'entrée");
@@ -841,18 +1121,20 @@ fn dialog_content(ui: &mut Ui, dialog: &mut Dialog, focus_first: bool) -> Dialog
         } => {
             ui.heading("Changer le mot de passe maître");
             ui.add_space(4.0);
-            let first = secret_input(ui, "Actuel", current);
-            focus(&first);
-            submitted |= entered(&first);
-            submitted |= entered(&secret_input(ui, "Nouveau", new));
-            submitted |= entered(&secret_input(ui, "Confirmer", confirm));
+            let [current_error, new_error, confirm_error] = master_errors(current, new, confirm);
+            let field = secret_input(ui, "Actuel", current);
+            submitted |= form.check(ui, &field, !current.is_empty(), current_error.as_deref());
+            let field = secret_input(ui, "Nouveau", new);
+            submitted |= form.check(ui, &field, !new.is_empty(), new_error.as_deref());
+            let field = secret_input(ui, "Confirmer", confirm);
+            submitted |= form.check(ui, &field, !confirm.is_empty(), confirm_error.as_deref());
         }
         Dialog::Import { path } => {
             ui.heading("Importer un CSV");
             ui.add_space(4.0);
-            let file = text_input(ui, "Fichier", path);
-            focus(&file);
-            submitted |= entered(&file);
+            let error = path_error(path);
+            let file = path_input(ui, path, picking, browse);
+            submitted |= form.check(ui, &file, !path.is_empty(), error);
         }
         Dialog::Export { path } => {
             ui.heading("Exporter en CSV");
@@ -862,9 +1144,9 @@ fn dialog_content(ui: &mut Ui, dialog: &mut Dialog, focus_first: bool) -> Dialog
                 )
                 .color(palette(ui).warning),
             );
-            let file = text_input(ui, "Fichier", path);
-            focus(&file);
-            submitted |= entered(&file);
+            let error = path_error(path);
+            let file = path_input(ui, path, picking, browse);
+            submitted |= form.check(ui, &file, !path.is_empty(), error);
         }
     }
     if submitted {
@@ -968,11 +1250,11 @@ fn command_button_with(
 }
 
 /// Bouton réduit à son icône : le libellé reste dans l'infobulle et pour les lecteurs d'écran.
-fn icon_button(ui: &mut Ui, glyph: char, label: &str) -> Response {
+fn icon_button(ui: &mut Ui, glyph: char, label: &str, tooltip: &str) -> Response {
     let colors = palette(ui);
     let Some(font) = theme::icon_font(ui, 16.0) else {
         // Sans police d'icônes, le texte reste le seul moyen d'identifier le bouton.
-        return ui.button(label);
+        return ui.button(label).on_hover_text(tooltip);
     };
     let size = vec2(CONTROL_HEIGHT, CONTROL_HEIGHT);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
@@ -992,14 +1274,15 @@ fn icon_button(ui: &mut Ui, glyph: char, label: &str) -> Response {
             colors.accent,
         );
     }
-    response.on_hover_text(label)
+    response.on_hover_text(tooltip)
 }
 
 /// Ligne de liste à la manière d'un volet de navigation : une barre d'accent marque la sélection.
 fn entry_row(ui: &mut Ui, site: &str, username: &str, selected: bool) -> Response {
     let colors = palette(ui);
     let size = vec2(ui.available_width(), LIST_ROW_HEIGHT);
-    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    // Hors de l'ordre de tabulation : les flèches parcourent la liste, quelle qu'en soit la taille.
+    let (rect, response) = ui.allocate_exact_size(size, Sense::CLICK);
     response.widget_info(|| {
         WidgetInfo::selected(
             WidgetType::SelectableLabel,
@@ -1047,6 +1330,54 @@ fn paint_focus(ui: &Ui, response: &Response, rect: Rect) {
             egui::StrokeKind::Inside,
         );
     }
+}
+
+fn field_label(ui: &mut Ui, label: &str, required: bool) -> Response {
+    ui.scope(|ui| {
+        // Sans cela, la ligne aurait la hauteur d'un contrôle et s'éloignerait de son champ.
+        ui.spacing_mut().interact_size.y = 0.0;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            let response = ui.label(label);
+            if required {
+                ui.label(RichText::new("*").color(palette(ui).danger));
+            }
+            response
+        })
+        .inner
+    })
+    .inner
+}
+
+fn required_input(ui: &mut Ui, label: &str, value: &mut String) -> Response {
+    let label = field_label(ui, label, true);
+    ui.add(
+        TextEdit::singleline(value)
+            .desired_width(f32::INFINITY)
+            .margin(vec2(10.0, 6.0)),
+    )
+    .labelled_by(label.id)
+}
+
+fn path_input(ui: &mut Ui, path: &mut String, picking: bool, browse: &mut bool) -> Response {
+    let label = ui.label("Fichier");
+    ui.horizontal(|ui| {
+        let response = ui
+            .add(
+                TextEdit::singleline(path)
+                    .desired_width(ui.available_width() - BROWSE_BUTTON_WIDTH)
+                    .margin(vec2(10.0, 6.0)),
+            )
+            .labelled_by(label.id);
+        if ui
+            .add_enabled(!picking, Button::new("Parcourir…"))
+            .clicked()
+        {
+            *browse = true;
+        }
+        response
+    })
+    .inner
 }
 
 fn text_input(ui: &mut Ui, label: &str, value: &mut String) -> Response {
@@ -1622,6 +1953,231 @@ mod tests {
                 .is_some()
         );
         assert!(harness.query_by_label("Votre coffre est vide").is_none());
+    }
+
+    fn type_text(harness: &mut Harness<'_, GuiApp>, text: &str) {
+        harness
+            .input_mut()
+            .events
+            .push(egui::Event::Text(text.to_owned()));
+        harness.run_steps(3);
+    }
+
+    fn press_copy(harness: &mut Harness<'_, GuiApp>) {
+        harness.input_mut().events.push(egui::Event::Copy);
+        harness.run_steps(3);
+    }
+
+    fn copied(harness: &Harness<'_, GuiApp>) -> Option<String> {
+        harness.state().clipboard.copied_text().map(str::to_owned)
+    }
+
+    #[test]
+    fn unlocking_focuses_the_search() {
+        let mut harness = registered();
+        type_text(&mut harness, "git");
+        assert_eq!(harness.state().search, "git");
+    }
+
+    #[test]
+    fn closing_a_dialog_returns_to_the_search() {
+        let mut harness = registered();
+        click(&mut harness, "Ajouter");
+        click(&mut harness, "Annuler");
+        type_text(&mut harness, "git");
+        assert_eq!(harness.state().search, "git");
+    }
+
+    #[test]
+    fn arrow_keys_keep_the_focus_in_the_search() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        add_entry(&mut harness, "https://b.example", "p2");
+        harness.key_press(Key::ArrowDown);
+        harness.run_steps(3);
+        type_text(&mut harness, "a");
+        assert_eq!(harness.state().search, "a");
+    }
+
+    #[test]
+    fn copy_shortcut_copies_the_password_from_the_search() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        type_text(&mut harness, "a");
+        press_copy(&mut harness);
+        assert_eq!(copied(&harness).as_deref(), Some("p1"));
+    }
+
+    #[test]
+    fn copy_shortcut_leaves_a_search_selection_alone() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        type_text(&mut harness, "a");
+        let id = egui::Id::new(SEARCH_ID);
+        let ctx = harness.ctx.clone();
+        let mut state = TextEdit::load_state(&ctx, id).unwrap();
+        state
+            .cursor
+            .set_char_range(Some(egui::text::CCursorRange::two(
+                egui::text::CCursor::new(0),
+                egui::text::CCursor::new(1),
+            )));
+        TextEdit::store_state(&ctx, id, state);
+        press_copy(&mut harness);
+        assert_eq!(copied(&harness), None);
+    }
+
+    #[test]
+    fn username_shortcut_copies_the_username() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        harness.key_press_modifiers(Modifiers::COMMAND, Key::B);
+        harness.run_steps(3);
+        let username = harness.state().entries()[0].fields.username.clone();
+        assert_eq!(copied(&harness), Some(username));
+    }
+
+    #[test]
+    fn shortcuts_are_off_while_a_dialog_is_open() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        click(&mut harness, "Ajouter");
+        press_copy(&mut harness);
+        assert_eq!(copied(&harness), None);
+    }
+
+    #[test]
+    fn add_shortcut_opens_the_form() {
+        let mut harness = registered();
+        harness.key_press_modifiers(Modifiers::COMMAND, Key::N);
+        harness.run_steps(3);
+        assert!(matches!(harness.state().dialog, Some(Dialog::Entry { .. })));
+    }
+
+    #[test]
+    fn delete_key_asks_for_confirmation_unless_it_edits_the_search() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        type_text(&mut harness, "a");
+        harness.key_press(Key::Delete);
+        harness.run_steps(3);
+        assert!(harness.state().dialog.is_none());
+        harness.key_press(Key::Backspace);
+        harness.run_steps(3);
+        assert_eq!(harness.state().search, "");
+        harness.key_press(Key::Delete);
+        harness.run_steps(3);
+        assert!(matches!(
+            harness.state().dialog,
+            Some(Dialog::Delete { .. })
+        ));
+        assert_eq!(harness.state().entries().len(), 1);
+    }
+
+    #[test]
+    fn list_rows_are_not_tab_stops() {
+        let mut harness = registered();
+        for site in [
+            "https://a.example",
+            "https://b.example",
+            "https://c.example",
+        ] {
+            add_entry(&mut harness, site, "p1");
+        }
+        // Depuis la recherche : Ajouter, Importer, Exporter, Mot de passe maître, MCP, Supprimer.
+        for _ in 0..6 {
+            harness.key_press(Key::Tab);
+            harness.run_steps(2);
+        }
+        harness.key_press(Key::Enter);
+        harness.run_steps(5);
+        assert!(matches!(
+            harness.state().dialog,
+            Some(Dialog::Delete { .. })
+        ));
+    }
+
+    #[test]
+    fn picked_file_fills_the_path_field() {
+        let mut harness = registered();
+        click(&mut harness, "Importer");
+        let (sender, receiver) = mpsc::channel();
+        harness.state_mut().file_picker = Some(receiver);
+        sender.send(Some(PathBuf::from("mots.csv"))).unwrap();
+        harness.run_steps(3);
+        assert!(harness.state().file_picker.is_none());
+        assert!(matches!(
+            &harness.state().dialog,
+            Some(Dialog::Import { path }) if path == "mots.csv"
+        ));
+    }
+
+    #[test]
+    fn empty_form_shows_every_required_error_at_once() {
+        let mut harness = registered();
+        click(&mut harness, "Ajouter");
+        assert!(harness.query_by_label("Le site est obligatoire").is_none());
+        click(&mut harness, "Valider");
+        for error in [
+            "Le site est obligatoire",
+            "L'identifiant est obligatoire",
+            "Le mot de passe est obligatoire",
+        ] {
+            assert!(harness.query_by_label(error).is_some(), "{error}");
+        }
+        assert!(harness.state().entries().is_empty());
+    }
+
+    #[test]
+    fn invalid_email_appears_after_leaving_the_field() {
+        let mut harness = registered();
+        click(&mut harness, "Ajouter");
+        type_into(&mut harness, "E-mail", "pas-un-mail");
+        harness.run_steps(2);
+        assert!(
+            harness
+                .query_by_label("L'adresse e-mail est invalide")
+                .is_none()
+        );
+        harness
+            .get_by_role_and_label(Role::TextInput, "Notes")
+            .click();
+        harness.run_steps(3);
+        assert!(
+            harness
+                .query_by_label("L'adresse e-mail est invalide")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn registration_shows_rules_under_the_fields() {
+        let mut harness = harness();
+        harness.step();
+        click(&mut harness, "Créer le compte");
+        assert!(
+            harness
+                .query_by_label("Le nom d'utilisateur doit faire de 3 à 50 caractères")
+                .is_some()
+        );
+        assert!(harness.state().workspace.is_none());
+    }
+
+    #[test]
+    fn export_refuses_an_existing_file_with_a_clear_message() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("deja.csv");
+        std::fs::write(&path, "contenu").unwrap();
+        let mut harness = registered();
+        click(&mut harness, "Exporter");
+        type_into(&mut harness, "Fichier", path.to_str().unwrap());
+        click(&mut harness, "Valider");
+        assert!(
+            harness
+                .query_by_label("Ce fichier existe déjà : choisissez un autre nom")
+                .is_some()
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "contenu");
     }
 
     #[test]

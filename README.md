@@ -20,6 +20,19 @@ L'exécutable se trouve dans `target/release/`. Sous Windows, il ne dépend d'au
 
 La GUI reprend le style de Windows 11 et suit le mode clair ou sombre du système. Sous Windows, elle utilise les polices Segoe UI et Segoe Fluent Icons déjà installées ; ailleurs, elle garde sa police intégrée et ses boutons restent sans icône. La TUI suit les couleurs du terminal.
 
+## Raccourcis de la GUI
+
+| Touche | Action |
+|---|---|
+| Ctrl+F | Aller à la recherche |
+| ↑ / ↓ | Parcourir la liste |
+| Ctrl+C | Copier le mot de passe de l'entrée sélectionnée |
+| Ctrl+B | Copier l'identifiant |
+| Ctrl+N | Ajouter une entrée |
+| Suppr | Supprimer l'entrée, après confirmation |
+| Entrée | Valider le formulaire |
+| Échap | Fermer le formulaire |
+
 ## Utilisation
 
 ```

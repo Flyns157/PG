@@ -26,21 +26,41 @@ impl EntryFields {
         fields
     }
 
+    pub fn url_error(&self) -> Option<&'static str> {
+        self.url
+            .trim()
+            .is_empty()
+            .then_some("Le site est obligatoire")
+    }
+
+    pub fn username_error(&self) -> Option<&'static str> {
+        self.username
+            .trim()
+            .is_empty()
+            .then_some("L'identifiant est obligatoire")
+    }
+
+    pub fn password_error(&self) -> Option<&'static str> {
+        self.password
+            .is_empty()
+            .then_some("Le mot de passe est obligatoire")
+    }
+
+    pub fn email_error(&self) -> Option<&'static str> {
+        (!self.email.is_empty() && !self.email.contains('@'))
+            .then_some("L'adresse e-mail est invalide")
+    }
+
     pub fn validate(&self) -> Result<()> {
-        let invalid = |message: &str| Err(Error::Validation(message.to_owned()));
-        if self.url.trim().is_empty() {
-            return invalid("Le site est obligatoire");
+        let error = self
+            .url_error()
+            .or_else(|| self.username_error())
+            .or_else(|| self.password_error())
+            .or_else(|| self.email_error());
+        match error {
+            Some(message) => Err(Error::Validation(message.to_owned())),
+            None => Ok(()),
         }
-        if self.username.trim().is_empty() {
-            return invalid("L'identifiant est obligatoire");
-        }
-        if self.password.is_empty() {
-            return invalid("Le mot de passe est obligatoire");
-        }
-        if !self.email.is_empty() && !self.email.contains('@') {
-            return invalid("L'adresse e-mail est invalide");
-        }
-        Ok(())
     }
 }
 
