@@ -22,25 +22,25 @@ impl SecretClipboard {
         Ok(())
     }
 
-    pub fn tick(&mut self) {
-        if self
-            .copied
+    /// Renvoie vrai si le délai vient d'effacer le secret du presse-papiers.
+    pub fn tick(&mut self) -> bool {
+        self.copied
             .as_ref()
             .is_some_and(|(_, at)| at.elapsed() >= CLEAR_AFTER)
-        {
-            self.clear();
-        }
+            && self.clear()
     }
 
-    pub fn clear(&mut self) {
+    /// Renvoie vrai si le secret était encore dans le presse-papiers et qu'il a été effacé.
+    pub fn clear(&mut self) -> bool {
         let Some((text, _)) = self.copied.take() else {
-            return;
+            return false;
         };
         if let Ok(mut clipboard) = arboard::Clipboard::new()
             && clipboard.get_text().is_ok_and(|current| current == *text)
         {
-            let _ = clipboard.clear();
+            return clipboard.clear().is_ok();
         }
+        false
     }
 }
 
@@ -63,5 +63,24 @@ fn secret_setter(clipboard: &mut arboard::Clipboard) -> arboard::Set<'_> {
 impl Drop for SecretClipboard {
     fn drop(&mut self) {
         self.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expiry_does_not_report_a_clipboard_it_did_not_clear() {
+        // Ce texte n'est pas dans le presse-papiers : le contenu de l'utilisateur reste intact.
+        let copied = (
+            Zeroizing::new("pg-test-secret-jamais-copie-7f3a".to_owned()),
+            Instant::now() - CLEAR_AFTER,
+        );
+        let mut clipboard = SecretClipboard {
+            copied: Some(copied),
+        };
+        assert!(!clipboard.tick());
+        assert!(clipboard.copied.is_none());
     }
 }

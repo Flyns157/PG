@@ -103,6 +103,12 @@ impl Store {
         })
     }
 
+    pub fn has_accounts(&self) -> Result<bool> {
+        Ok(self
+            .conn
+            .query_row("SELECT EXISTS(SELECT 1 FROM users)", [], |row| row.get(0))?)
+    }
+
     pub fn register(&self, username: &str, password: &str) -> Result<Session> {
         let username = username.trim();
         if !(3..=50).contains(&username.chars().count()) {

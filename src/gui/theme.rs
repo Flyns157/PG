@@ -36,6 +36,7 @@ pub struct Palette {
     pub card: Color32,
     pub control: Color32,
     pub stroke: Color32,
+    pub control_stroke: Color32,
     pub text: Color32,
     pub secondary: Color32,
     pub accent: Color32,
@@ -54,6 +55,7 @@ const LIGHT: Palette = Palette {
     card: Color32::from_rgb(0xFB, 0xFB, 0xFB),
     control: Color32::from_rgb(0xFF, 0xFF, 0xFF),
     stroke: Color32::from_rgb(0xE0, 0xE0, 0xE0),
+    control_stroke: Color32::from_rgb(0x8A, 0x8A, 0x8A),
     text: Color32::from_rgb(0x1B, 0x1B, 0x1B),
     secondary: Color32::from_rgb(0x5D, 0x5D, 0x5D),
     accent: Color32::from_rgb(0x00, 0x5F, 0xB8),
@@ -72,6 +74,7 @@ const DARK: Palette = Palette {
     card: Color32::from_rgb(0x2B, 0x2B, 0x2B),
     control: Color32::from_rgb(0x33, 0x33, 0x33),
     stroke: Color32::from_rgb(0x40, 0x40, 0x40),
+    control_stroke: Color32::from_rgb(0x85, 0x85, 0x85),
     text: Color32::from_rgb(0xFF, 0xFF, 0xFF),
     secondary: Color32::from_rgb(0xCF, 0xCF, 0xCF),
     accent: Color32::from_rgb(0x60, 0xCD, 0xFF),
@@ -185,7 +188,7 @@ fn style(theme: Theme) -> Style {
     ] {
         state.bg_fill = fill;
         state.weak_bg_fill = fill;
-        state.bg_stroke = Stroke::new(1.0_f32, palette.stroke);
+        state.bg_stroke = Stroke::new(1.0_f32, palette.control_stroke);
         state.fg_stroke = Stroke::new(1.0_f32, palette.text);
         state.corner_radius = control_radius;
         state.expansion = 0.0;
@@ -212,4 +215,35 @@ fn style(theme: Theme) -> Style {
     style.spacing.window_margin = egui::Margin::same(24);
     style.spacing.menu_margin = egui::Margin::same(24);
     style
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn luminance(color: Color32) -> f32 {
+        let channel = |value: u8| {
+            let value = f32::from(value) / 255.0;
+            if value <= 0.03928 {
+                value / 12.92
+            } else {
+                ((value + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * channel(color.r()) + 0.7152 * channel(color.g()) + 0.0722 * channel(color.b())
+    }
+
+    fn contrast(a: Color32, b: Color32) -> f32 {
+        let (a, b) = (luminance(a), luminance(b));
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+
+    #[test]
+    fn control_borders_reach_the_wcag_contrast() {
+        for palette in [LIGHT, DARK] {
+            for fill in [palette.background, palette.card, palette.control] {
+                assert!(contrast(palette.control_stroke, fill) >= 3.0);
+            }
+        }
+    }
 }

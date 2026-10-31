@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui::{
-    Align, Align2, Button, Context, CornerRadius, Frame, Key, Layout, Margin, Modal, Modifiers,
-    Rect, Response, RichText, ScrollArea, Sense, Stroke, TextEdit, TextStyle, TextWrapMode, Ui,
-    WidgetInfo, WidgetText, WidgetType, pos2, vec2,
+    Align, Align2, Button, Color32, Context, CornerRadius, Frame, Key, Layout, Margin, Modal,
+    Modifiers, Rect, Response, RichText, ScrollArea, Sense, Stroke, TextEdit, TextStyle,
+    TextWrapMode, Ui, WidgetInfo, WidgetText, WidgetType, pos2, vec2,
 };
 use zeroize::Zeroizing;
 
@@ -25,6 +25,7 @@ use crate::workspace::Workspace;
 use theme::{icon, palette};
 
 const TICK: Duration = Duration::from_secs(1);
+const MESSAGE_LIFETIME: Duration = Duration::from_secs(6);
 const LOGIN_CARD_WIDTH: f32 = 340.0;
 const LIST_ROW_HEIGHT: f32 = 48.0;
 const CONTROL_HEIGHT: f32 = 32.0;
@@ -35,6 +36,7 @@ const DETAIL_LABEL_WIDTH: f32 = 100.0;
 const DETAIL_CARD_CHROME: f32 = 34.0;
 const DIALOG_WIDTH: f32 = 460.0;
 const DIALOG_BUTTON_WIDTH: f32 = 130.0;
+const EMPTY_STATE_BUTTON_WIDTH: f32 = 170.0;
 const PASSWORD_TOOLS_WIDTH: f32 = 190.0;
 
 const ICON_PNG: &[u8] = include_bytes!("../../assets/icon.png");
@@ -91,6 +93,22 @@ enum Dialog {
     },
 }
 
+impl Dialog {
+    fn new_entry() -> Self {
+        Self::Entry {
+            id: None,
+            fields: EntryFields::default(),
+            revealed: false,
+        }
+    }
+
+    fn import() -> Self {
+        Self::Import {
+            path: String::new(),
+        }
+    }
+}
+
 enum DialogAction {
     Keep,
     Close,
@@ -107,56 +125,80 @@ struct GuiApp {
     search: String,
     revealed: bool,
     status: Option<(String, bool)>,
+    status_expires: Option<Instant>,
     dialog_error: Option<String>,
+    dialog_focused: bool,
+    discard_prompt: bool,
+    login_focus: bool,
     last_activity: Instant,
 }
 
 impl GuiApp {
     fn new(store: Store) -> Self {
+        // Au premier lancement, il n'y a rien à déverrouiller.
+        let login = LoginForm {
+            registering: !store.has_accounts().unwrap_or(true),
+            ..LoginForm::default()
+        };
         Self {
             store,
             clipboard: SecretClipboard::default(),
             mcp: None,
             workspace: None,
-            login: LoginForm::default(),
+            login,
             dialog: None,
             search: String::new(),
             revealed: false,
             status: None,
+            status_expires: None,
             dialog_error: None,
+            dialog_focused: false,
+            discard_prompt: false,
+            login_focus: true,
             last_activity: Instant::now(),
         }
     }
 
     fn set_info(&mut self, message: impl Into<String>) {
         self.status = Some((message.into(), false));
+        self.status_expires = Some(Instant::now() + MESSAGE_LIFETIME);
     }
 
     fn set_error(&mut self, error: impl ToString) {
         self.status = Some((error.to_string(), true));
+        self.status_expires = None;
     }
 
     fn lock(&mut self) {
         self.workspace = None;
         self.mcp = None;
         self.dialog = None;
-        self.dialog_error = None;
+        self.close_dialog();
         self.search.clear();
         self.revealed = false;
         self.status = None;
         self.login = LoginForm::default();
+        self.login_focus = true;
         self.clipboard.clear();
     }
 
     fn ui(&mut self, ctx: &Context) {
         ctx.request_repaint_after(TICK);
-        self.clipboard.tick();
+        if self.clipboard.tick() {
+            self.set_info("Presse-papiers effacé");
+        }
+        if self.status_expires.is_some_and(|at| Instant::now() >= at) {
+            self.status = None;
+            self.status_expires = None;
+        }
         if ctx.input(|input| !input.events.is_empty()) {
             self.last_activity = Instant::now();
         }
         if self.workspace.is_some() && self.last_activity.elapsed() >= IDLE_LOCK {
             self.lock();
             self.set_info("Coffre verrouillé après 5 minutes d'inactivité");
+            // L'utilisateur était absent : le message doit l'attendre.
+            self.status_expires = None;
         }
         // Après le verrouillage, et sans compter comme une activité de l'utilisateur.
         if let Some(server) = &self.mcp {
@@ -202,10 +244,21 @@ impl GuiApp {
         );
         ui.add_space(12.0);
         let mut submitted = false;
-        text_field(ui, "Utilisateur", &mut self.login.username);
-        submitted |= secret_field(ui, "Mot de passe maître", &mut self.login.password);
+        let username = text_input(ui, "Utilisateur", &mut self.login.username);
+        if std::mem::take(&mut self.login_focus) {
+            username.request_focus();
+        }
+        let password = secret_input(ui, "Mot de passe maître", &mut self.login.password);
+        submitted |= entered(&password);
+        if entered(&username) {
+            if self.login.password.is_empty() {
+                password.request_focus();
+            } else {
+                submitted = true;
+            }
+        }
         if registering {
-            submitted |= secret_field(ui, "Confirmer", &mut self.login.confirm);
+            submitted |= entered(&secret_input(ui, "Confirmer", &mut self.login.confirm));
         }
         ui.add_space(4.0);
         submitted |= primary_button(
@@ -226,6 +279,7 @@ impl GuiApp {
             };
             if ui.link(other).clicked() {
                 self.login.registering = !registering;
+                self.login_focus = true;
                 self.status = None;
             }
         });
@@ -333,16 +387,10 @@ impl GuiApp {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
                 if command_button(ui, icon::ADD, "Ajouter", false).clicked() {
-                    self.dialog = Some(Dialog::Entry {
-                        id: None,
-                        fields: EntryFields::default(),
-                        revealed: false,
-                    });
+                    self.dialog = Some(Dialog::new_entry());
                 }
                 if command_button(ui, icon::IMPORT, "Importer", false).clicked() {
-                    self.dialog = Some(Dialog::Import {
-                        path: String::new(),
-                    });
+                    self.dialog = Some(Dialog::import());
                 }
                 if command_button(ui, icon::EXPORT, "Exporter", false).clicked() {
                     self.dialog = Some(Dialog::Export {
@@ -436,10 +484,7 @@ impl GuiApp {
             .and_then(|workspace| workspace.selected())
             .cloned()
         else {
-            ui.add_space(24.0);
-            ui.vertical_centered(|ui| {
-                ui.label(RichText::new("Aucune entrée").color(palette(ui).secondary));
-            });
+            self.empty_state_ui(ui);
             return;
         };
         let fields = &entry.fields;
@@ -449,7 +494,8 @@ impl GuiApp {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     // Disposition de droite à gauche : le dernier ajouté s'affiche en premier.
-                    if command_button(ui, icon::DELETE, "Supprimer", false).clicked() {
+                    let danger = palette(ui).danger;
+                    if command_button_with(ui, icon::DELETE, "Supprimer", false, danger).clicked() {
                         self.dialog = Some(Dialog::Delete {
                             id: entry.id.clone(),
                             site: fields.url.clone(),
@@ -531,6 +577,38 @@ impl GuiApp {
         });
     }
 
+    fn empty_state_ui(&mut self, ui: &mut Ui) {
+        let vault_is_empty = self
+            .workspace
+            .as_ref()
+            .is_none_or(|workspace| workspace.all_entries().is_empty());
+        let secondary = palette(ui).secondary;
+        ui.add_space(48.0);
+        ui.vertical_centered(|ui| {
+            if !vault_is_empty {
+                let message = format!("Aucun résultat pour « {} »", self.search.trim());
+                ui.label(RichText::new(message).color(secondary));
+                return;
+            }
+            ui.heading("Votre coffre est vide");
+            ui.label(
+                RichText::new("Ajoutez votre première entrée ou importez un fichier CSV.")
+                    .color(secondary),
+            );
+            ui.add_space(8.0);
+            if primary_button(ui, "Ajouter une entrée", EMPTY_STATE_BUTTON_WIDTH).clicked() {
+                self.dialog = Some(Dialog::new_entry());
+            }
+            let import = ui.add_sized(
+                vec2(EMPTY_STATE_BUTTON_WIDTH, CONTROL_HEIGHT),
+                Button::new("Importer un CSV"),
+            );
+            if import.clicked() {
+                self.dialog = Some(Dialog::import());
+            }
+        });
+    }
+
     fn copy(&mut self, text: &str, message: &str) {
         match self.clipboard.copy(text) {
             Ok(()) => self.set_info(message),
@@ -538,51 +616,114 @@ impl GuiApp {
         }
     }
 
+    /// Une saisie en cours n'est jamais perdue sans confirmation : le clic hors du dialogue ne
+    /// le ferme pas, et Échap demande confirmation si le formulaire a changé.
     fn dialog_ui(&mut self, ctx: &Context) {
         let Some(mut dialog) = self.dialog.take() else {
             return;
         };
+        let focus_first = !std::mem::replace(&mut self.dialog_focused, true);
+        if ctx.input(|input| input.key_pressed(Key::Escape)) {
+            if self.discard_prompt {
+                self.discard_prompt = false;
+                self.dialog_focused = false;
+            } else if self.dialog_is_dirty(&dialog) {
+                self.discard_prompt = true;
+            } else {
+                self.close_dialog();
+                return;
+            }
+        }
         let error = self.dialog_error.clone();
+        let discard_prompt = self.discard_prompt;
+        let mut keep_editing = false;
         let modal = Modal::new(egui::Id::new("dialog")).show(ctx, |ui| {
             ui.set_width(DIALOG_WIDTH);
-            let mut action = dialog_content(ui, &mut dialog);
+            let mut action = dialog_content(ui, &mut dialog, focus_first);
             if let Some(error) = &error {
                 ui.label(RichText::new(error).color(palette(ui).danger));
             }
             ui.add_space(8.0);
+            if discard_prompt {
+                ui.label("Abandonner les modifications ?");
+            }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let submit = if matches!(dialog, Dialog::Delete { .. }) {
-                    "Confirmer la suppression"
-                } else {
-                    "Valider"
-                };
+                if discard_prompt {
+                    if secondary_button(ui, "Continuer la saisie").clicked() {
+                        keep_editing = true;
+                    }
+                    let danger = palette(ui).danger;
+                    if filled_button(ui, "Abandonner", DIALOG_BUTTON_WIDTH, danger).clicked() {
+                        action = DialogAction::Close;
+                    }
+                    return;
+                }
                 if secondary_button(ui, "Annuler").clicked() {
                     action = DialogAction::Close;
                 }
-                if primary_button(ui, submit, DIALOG_BUTTON_WIDTH).clicked() {
+                let submit = if matches!(dialog, Dialog::Delete { .. }) {
+                    let danger = palette(ui).danger;
+                    filled_button(ui, "Confirmer la suppression", DIALOG_BUTTON_WIDTH, danger)
+                } else {
+                    primary_button(ui, "Valider", DIALOG_BUTTON_WIDTH)
+                };
+                if submit.clicked() {
                     action = DialogAction::Submit;
                 }
             });
             action
         });
-        let action = if modal.should_close() {
-            DialogAction::Close
-        } else {
-            modal.inner
-        };
-        match action {
+        if keep_editing {
+            self.discard_prompt = false;
+            self.dialog_focused = false;
+        }
+        match modal.inner {
             DialogAction::Keep => self.dialog = Some(dialog),
-            DialogAction::Close => self.dialog_error = None,
+            DialogAction::Close => self.close_dialog(),
             DialogAction::Submit => match self.submit_dialog(&dialog) {
                 Ok(message) => {
-                    self.dialog_error = None;
+                    self.close_dialog();
                     self.set_info(message);
                 }
                 Err(error) => {
                     self.dialog_error = Some(error.to_string());
+                    self.dialog_focused = false;
+                    self.discard_prompt = false;
                     self.dialog = Some(dialog);
                 }
             },
+        }
+    }
+
+    fn close_dialog(&mut self) {
+        self.dialog_error = None;
+        self.dialog_focused = false;
+        self.discard_prompt = false;
+    }
+
+    fn dialog_is_dirty(&self, dialog: &Dialog) -> bool {
+        match dialog {
+            Dialog::Entry { id, fields, .. } => {
+                let original = self
+                    .workspace
+                    .as_ref()
+                    .and_then(|workspace| {
+                        workspace
+                            .all_entries()
+                            .iter()
+                            .find(|entry| Some(&entry.id) == id.as_ref())
+                    })
+                    .map(|entry| entry.fields.clone())
+                    .unwrap_or_default();
+                *fields != original
+            }
+            Dialog::Delete { .. } => false,
+            Dialog::ChangeMaster {
+                current,
+                new,
+                confirm,
+            } => !(current.is_empty() && new.is_empty() && confirm.is_empty()),
+            Dialog::Import { path } | Dialog::Export { path } => !path.is_empty(),
         }
     }
 
@@ -645,8 +786,13 @@ impl eframe::App for GuiApp {
     }
 }
 
-fn dialog_content(ui: &mut Ui, dialog: &mut Dialog) -> DialogAction {
+fn dialog_content(ui: &mut Ui, dialog: &mut Dialog, focus_first: bool) -> DialogAction {
     let mut submitted = false;
+    let focus = |response: &Response| {
+        if focus_first {
+            response.request_focus();
+        }
+    };
     match dialog {
         Dialog::Entry {
             id,
@@ -659,26 +805,30 @@ fn dialog_content(ui: &mut Ui, dialog: &mut Dialog) -> DialogAction {
                 "Nouvelle entrée"
             });
             ui.add_space(4.0);
-            text_field(ui, "Site", &mut fields.url);
-            text_field(ui, "Identifiant", &mut fields.username);
+            let site = text_input(ui, "Site", &mut fields.url);
+            focus(&site);
+            submitted |= entered(&site);
+            submitted |= entered(&text_input(ui, "Identifiant", &mut fields.username));
             let label = ui.label("Mot de passe");
             ui.horizontal(|ui| {
-                ui.add(
-                    TextEdit::singleline(&mut fields.password)
-                        .password(!*revealed)
-                        .desired_width(ui.available_width() - PASSWORD_TOOLS_WIDTH)
-                        .margin(vec2(10.0, 6.0)),
-                )
-                .labelled_by(label.id);
+                let password = ui
+                    .add(
+                        TextEdit::singleline(&mut fields.password)
+                            .password(!*revealed)
+                            .desired_width(ui.available_width() - PASSWORD_TOOLS_WIDTH)
+                            .margin(vec2(10.0, 6.0)),
+                    )
+                    .labelled_by(label.id);
+                submitted |= entered(&password);
                 ui.checkbox(revealed, "Afficher");
                 if ui.button("Générer").clicked() {
                     fields.password = generate_password(DEFAULT_LENGTH);
                     *revealed = true;
                 }
             });
-            text_field(ui, "E-mail", &mut fields.email);
-            text_field(ui, "Téléphone", &mut fields.phone);
-            text_field(ui, "Notes", &mut fields.notes);
+            submitted |= entered(&text_input(ui, "E-mail", &mut fields.email));
+            submitted |= entered(&text_input(ui, "Téléphone", &mut fields.phone));
+            submitted |= entered(&text_input(ui, "Notes", &mut fields.notes));
         }
         Dialog::Delete { site, .. } => {
             ui.heading("Supprimer l'entrée");
@@ -691,14 +841,18 @@ fn dialog_content(ui: &mut Ui, dialog: &mut Dialog) -> DialogAction {
         } => {
             ui.heading("Changer le mot de passe maître");
             ui.add_space(4.0);
-            submitted |= secret_field(ui, "Actuel", current);
-            submitted |= secret_field(ui, "Nouveau", new);
-            submitted |= secret_field(ui, "Confirmer", confirm);
+            let first = secret_input(ui, "Actuel", current);
+            focus(&first);
+            submitted |= entered(&first);
+            submitted |= entered(&secret_input(ui, "Nouveau", new));
+            submitted |= entered(&secret_input(ui, "Confirmer", confirm));
         }
         Dialog::Import { path } => {
             ui.heading("Importer un CSV");
             ui.add_space(4.0);
-            text_field(ui, "Fichier", path);
+            let file = text_input(ui, "Fichier", path);
+            focus(&file);
+            submitted |= entered(&file);
         }
         Dialog::Export { path } => {
             ui.heading("Exporter en CSV");
@@ -708,7 +862,9 @@ fn dialog_content(ui: &mut Ui, dialog: &mut Dialog) -> DialogAction {
                 )
                 .color(palette(ui).warning),
             );
-            text_field(ui, "Fichier", path);
+            let file = text_input(ui, "Fichier", path);
+            focus(&file);
+            submitted |= entered(&file);
         }
     }
     if submitted {
@@ -733,11 +889,16 @@ fn card(ui: &Ui) -> Frame {
 }
 
 fn primary_button(ui: &mut Ui, label: &str, width: f32) -> Response {
-    let colors = palette(ui);
+    let accent = palette(ui).accent;
+    filled_button(ui, label, width, accent)
+}
+
+fn filled_button(ui: &mut Ui, label: &str, width: f32, fill: Color32) -> Response {
+    let on_fill = palette(ui).on_accent;
     ui.add_sized(
         vec2(width, CONTROL_HEIGHT),
-        Button::new(RichText::new(label).color(colors.on_accent))
-            .fill(colors.accent)
+        Button::new(RichText::new(label).color(on_fill))
+            .fill(fill)
             .stroke(Stroke::NONE),
     )
 }
@@ -751,6 +912,17 @@ fn secondary_button(ui: &mut Ui, label: &str) -> Response {
 
 /// Bouton de barre de commandes : icône d'accent et texte, sans fond tant qu'il n'est pas survolé.
 fn command_button(ui: &mut Ui, glyph: char, label: &str, active: bool) -> Response {
+    let accent = palette(ui).accent;
+    command_button_with(ui, glyph, label, active, accent)
+}
+
+fn command_button_with(
+    ui: &mut Ui,
+    glyph: char,
+    label: &str,
+    active: bool,
+    glyph_color: Color32,
+) -> Response {
     let colors = palette(ui);
     let icon_font = theme::icon_font(ui, 16.0);
     let text = WidgetText::from(label).into_galley(
@@ -782,7 +954,7 @@ fn command_button(ui: &mut Ui, glyph: char, label: &str, active: bool) -> Respon
                 Align2::LEFT_CENTER,
                 glyph,
                 font,
-                colors.accent,
+                glyph_color,
             );
         }
         let position = pos2(
@@ -877,28 +1049,30 @@ fn paint_focus(ui: &Ui, response: &Response, rect: Rect) {
     }
 }
 
-fn text_field(ui: &mut Ui, label: &str, value: &mut String) {
+fn text_input(ui: &mut Ui, label: &str, value: &mut String) -> Response {
     let label = ui.label(label);
     ui.add(
         TextEdit::singleline(value)
             .desired_width(f32::INFINITY)
             .margin(vec2(10.0, 6.0)),
     )
-    .labelled_by(label.id);
+    .labelled_by(label.id)
 }
 
-/// Renvoie vrai si la touche Entrée valide le champ.
-fn secret_field(ui: &mut Ui, label: &str, value: &mut Zeroizing<String>) -> bool {
+fn secret_input(ui: &mut Ui, label: &str, value: &mut Zeroizing<String>) -> Response {
     let label = ui.label(label);
-    let response = ui
-        .add(
-            TextEdit::singleline(&mut **value)
-                .password(true)
-                .desired_width(f32::INFINITY)
-                .margin(vec2(10.0, 6.0)),
-        )
-        .labelled_by(label.id);
-    response.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter))
+    ui.add(
+        TextEdit::singleline(&mut **value)
+            .password(true)
+            .desired_width(f32::INFINITY)
+            .margin(vec2(10.0, 6.0)),
+    )
+    .labelled_by(label.id)
+}
+
+/// Vrai si la touche Entrée vient de valider le champ.
+fn entered(response: &Response) -> bool {
+    response.lost_focus() && response.ctx.input(|input| input.key_pressed(Key::Enter))
 }
 
 fn field_name(ui: &mut Ui, label: &str) {
@@ -1021,7 +1195,6 @@ mod tests {
     fn registered<'a>() -> Harness<'a, GuiApp> {
         let mut harness = harness();
         harness.step();
-        click(&mut harness, "Créer un compte");
         type_into(&mut harness, "Utilisateur", "alice");
         type_into(&mut harness, "Mot de passe maître", MASTER);
         type_into(&mut harness, "Confirmer", MASTER);
@@ -1063,7 +1236,6 @@ mod tests {
     fn registration_rejects_a_mismatched_confirmation() {
         let mut harness = harness();
         harness.step();
-        click(&mut harness, "Créer un compte");
         type_into(&mut harness, "Utilisateur", "alice");
         type_into(&mut harness, "Mot de passe maître", MASTER);
         type_into(&mut harness, "Confirmer", "autre chose");
@@ -1253,6 +1425,203 @@ mod tests {
         let add = harness.get_by_label("Ajouter").rect();
         assert!(count.min.y >= add.max.y);
         assert!(count.min.x < add.min.x);
+    }
+
+    fn press_outside_the_dialog(harness: &mut Harness<'_, GuiApp>) {
+        let pos = pos2(5.0, 5.0);
+        harness
+            .input_mut()
+            .events
+            .push(egui::Event::PointerMoved(pos));
+        harness.run_steps(2);
+        for pressed in [true, false] {
+            harness.input_mut().events.push(egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Modifiers::NONE,
+            });
+            harness.run_steps(2);
+        }
+    }
+
+    fn dialog_site(harness: &Harness<'_, GuiApp>) -> String {
+        match &harness.state().dialog {
+            Some(Dialog::Entry { fields, .. }) => fields.url.clone(),
+            _ => panic!("formulaire d'entrée fermé"),
+        }
+    }
+
+    #[test]
+    fn first_launch_opens_account_creation_and_later_launches_the_login() {
+        let mut harness = harness();
+        harness.step();
+        assert!(harness.query_by_label("Créer le compte").is_some());
+        type_into(&mut harness, "Utilisateur", "alice");
+        type_into(&mut harness, "Mot de passe maître", MASTER);
+        type_into(&mut harness, "Confirmer", MASTER);
+        click(&mut harness, "Créer le compte");
+        click(&mut harness, "Verrouiller");
+        assert!(harness.query_by_label("Se connecter").is_some());
+    }
+
+    #[test]
+    fn enter_in_the_login_name_moves_to_an_empty_password() {
+        let mut harness = registered();
+        click(&mut harness, "Verrouiller");
+        type_into(&mut harness, "Utilisateur", "alice");
+        harness.key_press(Key::Enter);
+        harness.run_steps(3);
+        assert!(harness.state().status.is_none());
+        harness
+            .input_mut()
+            .events
+            .push(egui::Event::Text(MASTER.to_owned()));
+        harness.run_steps(3);
+        harness.key_press(Key::Enter);
+        harness.run_steps(3);
+        assert!(harness.state().workspace.is_some());
+    }
+
+    #[test]
+    fn a_dialog_opens_with_its_first_field_focused() {
+        let mut harness = registered();
+        click(&mut harness, "Ajouter");
+        harness
+            .input_mut()
+            .events
+            .push(egui::Event::Text("https://a.example".to_owned()));
+        harness.run_steps(3);
+        assert_eq!(dialog_site(&harness), "https://a.example");
+    }
+
+    #[test]
+    fn enter_in_a_text_field_submits_the_dialog() {
+        let mut harness = registered();
+        click(&mut harness, "Ajouter");
+        type_into(&mut harness, "Site", "https://a.example");
+        type_into(&mut harness, "Identifiant", "alice");
+        harness
+            .get_by_role_and_label(Role::PasswordInput, "Mot de passe")
+            .click();
+        harness.step();
+        harness
+            .get_by_role_and_label(Role::PasswordInput, "Mot de passe")
+            .type_text("p1");
+        harness.step();
+        harness.key_press(Key::Enter);
+        harness.run_steps(30);
+        assert!(harness.state().dialog.is_none());
+        assert_eq!(harness.state().entries().len(), 1);
+    }
+
+    #[test]
+    fn enter_does_not_confirm_a_deletion() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        click(&mut harness, "Supprimer");
+        harness.key_press(Key::Enter);
+        harness.run_steps(5);
+        assert!(harness.state().dialog.is_some());
+        assert_eq!(harness.state().entries().len(), 1);
+    }
+
+    #[test]
+    fn clicking_outside_a_dialog_keeps_the_typed_data() {
+        let mut harness = registered();
+        click(&mut harness, "Ajouter");
+        type_into(&mut harness, "Site", "https://a.example");
+        press_outside_the_dialog(&mut harness);
+        assert_eq!(dialog_site(&harness), "https://a.example");
+    }
+
+    #[test]
+    fn escape_closes_an_untouched_dialog() {
+        let mut harness = registered();
+        click(&mut harness, "Ajouter");
+        harness.key_press(Key::Escape);
+        harness.run_steps(30);
+        assert!(harness.state().dialog.is_none());
+    }
+
+    #[test]
+    fn escape_asks_before_discarding_changes() {
+        let mut harness = registered();
+        click(&mut harness, "Ajouter");
+        type_into(&mut harness, "Site", "https://a.example");
+        harness.key_press(Key::Escape);
+        harness.run_steps(3);
+        assert_eq!(dialog_site(&harness), "https://a.example");
+        click(&mut harness, "Continuer la saisie");
+        assert_eq!(dialog_site(&harness), "https://a.example");
+        assert!(harness.query_by_label("Abandonner").is_none());
+        harness.key_press(Key::Escape);
+        harness.run_steps(3);
+        click(&mut harness, "Abandonner");
+        assert!(harness.state().dialog.is_none());
+    }
+
+    #[test]
+    fn locking_forgets_a_pending_discard_prompt() {
+        let mut harness = registered();
+        click(&mut harness, "Ajouter");
+        type_into(&mut harness, "Site", "https://a.example");
+        harness.key_press(Key::Escape);
+        harness.run_steps(3);
+        assert!(harness.state().discard_prompt);
+        harness.state_mut().lock();
+        assert!(!harness.state().discard_prompt);
+    }
+
+    #[test]
+    fn escape_on_an_unchanged_edit_closes_it() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        click(&mut harness, "Modifier");
+        harness.key_press(Key::Escape);
+        harness.run_steps(30);
+        assert!(harness.state().dialog.is_none());
+    }
+
+    #[test]
+    fn information_messages_expire_but_errors_stay() {
+        let mut harness = registered();
+        harness.state_mut().set_info("Fait");
+        harness.step();
+        assert!(harness.query_by_label("Fait").is_some());
+        harness.state_mut().status_expires = Some(Instant::now());
+        harness.step();
+        assert!(harness.state().status.is_none());
+        harness.state_mut().set_error("Échec");
+        assert!(harness.state().status_expires.is_none());
+    }
+
+    #[test]
+    fn empty_vault_offers_to_add_or_import() {
+        let mut harness = registered();
+        assert!(harness.query_by_label("Votre coffre est vide").is_some());
+        click(&mut harness, "Importer un CSV");
+        assert!(matches!(
+            harness.state().dialog,
+            Some(Dialog::Import { .. })
+        ));
+        click(&mut harness, "Annuler");
+        click(&mut harness, "Ajouter une entrée");
+        assert!(matches!(harness.state().dialog, Some(Dialog::Entry { .. })));
+    }
+
+    #[test]
+    fn search_without_result_names_the_query() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        type_into(&mut harness, "Recherche", "zzz");
+        harness.run_steps(3);
+        assert!(
+            harness
+                .query_by_label("Aucun résultat pour « zzz »")
+                .is_some()
+        );
+        assert!(harness.query_by_label("Votre coffre est vide").is_none());
     }
 
     #[test]
