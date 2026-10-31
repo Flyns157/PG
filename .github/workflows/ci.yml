@@ -1,0 +1,47 @@
+# Vérifie que chaque commit poussé compile, sous Linux et Windows, pour chaque variante de features.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }} (${{ matrix.variant.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        variant:
+          - { name: tui+gui, flags: "" }
+          - { name: tui, flags: "--no-default-features --features tui" }
+          - { name: gui, flags: "--no-default-features --features gui" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.variant.name }}
+      # Bibliothèques X11 et Wayland requises par la GUI sous Linux.
+      - name: Installer les dépendances système
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libwayland-dev
+      # --all-targets compile aussi les tests, --locked refuse un Cargo.lock désynchronisé.
+      - name: Compiler
+        run: cargo build --locked --all-targets ${{ matrix.variant.flags }}
+
+  # Point de contrôle unique à exiger dans la protection de branche : son nom ne dépend pas de la matrice.
+  compile:
+    name: compile
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    steps:
+      - name: Vérifier le résultat des compilations
+        run: test "${{ needs.build.result }}" = "success"
