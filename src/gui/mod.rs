@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui::{
-    Align, Align2, Button, Color32, Context, CornerRadius, Frame, Key, Layout, Margin, Modal,
-    Modifiers, Rect, Response, RichText, ScrollArea, Sense, Stroke, TextEdit, TextStyle,
+    Align, Align2, Button, Color32, ColorImage, Context, CornerRadius, Frame, Key, Layout, Margin,
+    Modal, Modifiers, Rect, Response, RichText, ScrollArea, Sense, Stroke, TextEdit, TextStyle,
     TextWrapMode, Ui, WidgetInfo, WidgetText, WidgetType, pos2, vec2,
 };
 use zeroize::Zeroizing;
@@ -28,6 +28,8 @@ use theme::{icon, palette};
 const TICK: Duration = Duration::from_secs(1);
 const MESSAGE_LIFETIME: Duration = Duration::from_secs(6);
 const LOGIN_CARD_WIDTH: f32 = 340.0;
+const LOGO_SIZE: f32 = 40.0;
+const MENU_WIDTH: f32 = 220.0;
 const LIST_ROW_HEIGHT: f32 = 48.0;
 const CONTROL_HEIGHT: f32 = 32.0;
 // Bouton de verrouillage, libellé et champ de recherche.
@@ -38,7 +40,7 @@ const DETAIL_CARD_CHROME: f32 = 34.0;
 const DIALOG_WIDTH: f32 = 460.0;
 const DIALOG_BUTTON_WIDTH: f32 = 130.0;
 const EMPTY_STATE_BUTTON_WIDTH: f32 = 170.0;
-const PASSWORD_TOOLS_WIDTH: f32 = 190.0;
+const PASSWORD_TOOLS_WIDTH: f32 = 141.0;
 // Bouton « Parcourir… », marges du champ et espacement.
 const BROWSE_BUTTON_WIDTH: f32 = 116.0;
 // Marges de la fenêtre, boutons, message d'erreur et question d'abandon.
@@ -149,6 +151,7 @@ struct GuiApp {
     file_picker: Option<Receiver<Option<PathBuf>>>,
     login_focus: bool,
     focus_search: bool,
+    logo: Option<egui::TextureHandle>,
     last_activity: Instant,
 }
 
@@ -177,6 +180,7 @@ impl GuiApp {
             file_picker: None,
             login_focus: true,
             focus_search: false,
+            logo: None,
             last_activity: Instant::now(),
         }
     }
@@ -255,10 +259,14 @@ impl GuiApp {
 
     fn login_form_ui(&mut self, ui: &mut Ui) {
         let registering = self.login.registering;
-        ui.label(RichText::new("PG").heading().size(28.0));
+        let logo = self.logo.get_or_insert_with(|| load_logo(ui.ctx())).id();
+        ui.horizontal(|ui| {
+            ui.add(egui::Image::new((logo, vec2(LOGO_SIZE, LOGO_SIZE))));
+            ui.label(RichText::new("PG").heading().size(28.0));
+        });
         ui.label(
             RichText::new(if registering {
-                "Créer un coffre protégé par un mot de passe maître"
+                "Créer un compte protégé par un mot de passe maître"
             } else {
                 "Déverrouiller votre coffre"
             })
@@ -276,7 +284,7 @@ impl GuiApp {
             attempted: self.login.attempted,
             focus: std::mem::take(&mut self.login_focus),
         };
-        let username = text_input(ui, "Utilisateur", &mut self.login.username);
+        let username = text_input(ui, "Compte", &mut self.login.username);
         let username_entered = form.check(
             ui,
             &username,
@@ -312,7 +320,7 @@ impl GuiApp {
             if registering {
                 "Créer le compte"
             } else {
-                "Se connecter"
+                "Déverrouiller"
             },
             ui.available_width(),
         )
@@ -363,7 +371,7 @@ impl GuiApp {
     /// Le parcours principal se fait depuis la recherche : les raccourcis y restent actifs,
     /// sauf quand la touche a déjà un sens pour le texte saisi ou sélectionné.
     fn shortcuts(&mut self, ctx: &Context) {
-        if self.dialog.is_some() {
+        if self.dialog.is_some() || egui::Popup::is_any_open(ctx) {
             return;
         }
         let search_id = egui::Id::new(SEARCH_ID);
@@ -493,28 +501,19 @@ impl GuiApp {
             ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
-                if command_button(ui, icon::ADD, "Ajouter", false)
+                if primary_command_button(ui, icon::ADD, "Ajouter")
                     .on_hover_text("Ctrl+N")
                     .clicked()
                 {
                     self.dialog = Some(Dialog::new_entry());
                 }
-                if command_button(ui, icon::IMPORT, "Importer", false).clicked() {
-                    self.dialog = Some(Dialog::import());
-                }
-                if command_button(ui, icon::EXPORT, "Exporter", false).clicked() {
-                    self.dialog = Some(Dialog::Export {
-                        path: String::new(),
-                    });
-                }
-                if command_button(ui, icon::KEY, "Mot de passe maître", false).clicked() {
-                    self.dialog = Some(Dialog::ChangeMaster {
-                        current: Zeroizing::default(),
-                        new: Zeroizing::default(),
-                        confirm: Zeroizing::default(),
-                    });
-                }
-                if command_button(ui, icon::CONNECT, "MCP", self.mcp.is_some())
+                self.more_menu_ui(ui);
+                let (state, active) = if self.mcp.is_some() {
+                    ("Accès pour assistants IA : activé", true)
+                } else {
+                    ("Accès pour assistants IA : désactivé", false)
+                };
+                if command_button(ui, icon::CONNECT, state, active)
                     .on_hover_text("Active ou désactive le serveur MCP local")
                     .clicked()
                 {
@@ -526,7 +525,7 @@ impl GuiApp {
                     }
                 }
                 if let Some(server) = &self.mcp
-                    && command_button(ui, icon::COPY, "Jeton MCP", false)
+                    && command_button(ui, icon::COPY, "Copier le jeton d'accès", false)
                         .on_hover_text(server.url())
                         .clicked()
                 {
@@ -537,12 +536,42 @@ impl GuiApp {
         });
     }
 
+    fn more_menu_ui(&mut self, ui: &mut Ui) {
+        let more = command_button(ui, icon::MORE, "Plus", false);
+        // Le clavier entre dans le menu ; à la souris, le contour de focus serait du bruit.
+        let opened_by_keyboard = more.clicked()
+            && ui.input(|input| input.key_pressed(Key::Enter) || input.key_pressed(Key::Space));
+        let frame = Frame::popup(ui.style()).inner_margin(Margin::same(4));
+        egui::Popup::menu(&more).frame(frame).show(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let import = menu_item(ui, icon::IMPORT, "Importer");
+            if opened_by_keyboard {
+                import.request_focus();
+            }
+            if import.clicked() {
+                self.dialog = Some(Dialog::import());
+            }
+            if menu_item(ui, icon::EXPORT, "Exporter").clicked() {
+                self.dialog = Some(Dialog::Export {
+                    path: String::new(),
+                });
+            }
+            if menu_item(ui, icon::KEY, "Mot de passe maître").clicked() {
+                self.dialog = Some(Dialog::ChangeMaster {
+                    current: Zeroizing::default(),
+                    new: Zeroizing::default(),
+                    confirm: Zeroizing::default(),
+                });
+            }
+        });
+    }
+
     fn list_ui(&mut self, ui: &mut Ui) {
         let Some(workspace) = &mut self.workspace else {
             return;
         };
         let previous = workspace.selected_position();
-        if self.dialog.is_none() {
+        if self.dialog.is_none() && !egui::Popup::is_any_open(ui.ctx()) {
             ui.input_mut(|input| {
                 if input.consume_key(Modifiers::NONE, Key::ArrowUp) {
                     workspace.move_selection(-1);
@@ -604,8 +633,7 @@ impl GuiApp {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     // Disposition de droite à gauche : le dernier ajouté s'affiche en premier.
-                    let danger = palette(ui).danger;
-                    if command_button_with(ui, icon::DELETE, "Supprimer", false, danger)
+                    if danger_command_button(ui, icon::DELETE, "Supprimer")
                         .on_hover_text("Suppr")
                         .clicked()
                     {
@@ -651,20 +679,18 @@ impl GuiApp {
                     "Mot de passe",
                     |ui| {
                         // Disposition de droite à gauche : le dernier ajouté s'affiche en premier.
-                        let copy = icon_button(
+                        let accent = palette(ui).accent;
+                        let copy = icon_button_with(
                             ui,
                             icon::COPY,
                             "Copier le mot de passe",
                             "Copier le mot de passe (Ctrl+C)",
+                            accent,
                         );
                         if copy.clicked() {
                             self.copy(&fields.password, COPIED_PASSWORD);
                         }
-                        let (glyph, label) = if revealed {
-                            (icon::HIDE, "Masquer")
-                        } else {
-                            (icon::SHOW, "Afficher")
-                        };
+                        let (glyph, label) = reveal_control(revealed);
                         if icon_button(ui, glyph, label, label).clicked() {
                             self.revealed = !revealed;
                         }
@@ -928,7 +954,7 @@ impl GuiApp {
                     None => self.store.add(session, fields.clone())?,
                 };
                 saved_id = Some(entry.id.clone());
-                format!("{} enregistré", entry.fields.url)
+                format!("Entrée enregistrée : {}", entry.fields.url)
             }
             Dialog::Delete { id, .. } => {
                 self.store.delete(session, id)?;
@@ -1089,7 +1115,10 @@ fn dialog_content(
                                 .margin(vec2(10.0, 6.0)),
                         )
                         .labelled_by(label.id);
-                    ui.checkbox(revealed, "Afficher");
+                    let (glyph, reveal_label) = reveal_control(*revealed);
+                    if icon_button(ui, glyph, reveal_label, reveal_label).clicked() {
+                        *revealed = !*revealed;
+                    }
                     if ui.button("Générer").clicked() {
                         fields.password = generate_password(DEFAULT_LENGTH);
                         *revealed = true;
@@ -1156,6 +1185,24 @@ fn dialog_content(
     }
 }
 
+fn reveal_control(revealed: bool) -> (char, &'static str) {
+    if revealed {
+        (icon::HIDE, "Masquer")
+    } else {
+        (icon::SHOW, "Afficher")
+    }
+}
+
+fn load_logo(ctx: &Context) -> egui::TextureHandle {
+    let icon = eframe::icon_data::from_png_bytes(ICON_PNG).expect("icône intégrée invalide");
+    let size = [icon.width as usize, icon.height as usize];
+    ctx.load_texture(
+        "logo",
+        ColorImage::from_rgba_unmultiplied(size, &icon.rgba),
+        egui::TextureOptions::LINEAR,
+    )
+}
+
 fn entry_count(count: usize) -> String {
     let plural = if count > 1 { "s" } else { "" };
     format!("{count} entrée{plural}")
@@ -1192,20 +1239,72 @@ fn secondary_button(ui: &mut Ui, label: &str) -> Response {
     )
 }
 
-/// Bouton de barre de commandes : icône d'accent et texte, sans fond tant qu'il n'est pas survolé.
-fn command_button(ui: &mut Ui, glyph: char, label: &str, active: bool) -> Response {
-    let accent = palette(ui).accent;
-    command_button_with(ui, glyph, label, active, accent)
+#[derive(Clone, Copy)]
+struct CommandColors {
+    rest: Option<Color32>,
+    hover: Color32,
+    pressed: Color32,
+    glyph: Color32,
+    text: Color32,
+    min_width: f32,
 }
 
-fn command_button_with(
-    ui: &mut Ui,
-    glyph: char,
-    label: &str,
-    active: bool,
-    glyph_color: Color32,
-) -> Response {
+/// Bouton de barre de commandes : icône et texte, sans fond tant qu'il n'est pas survolé.
+/// L'accent signale seulement un état actif.
+fn command_button(ui: &mut Ui, glyph: char, label: &str, active: bool) -> Response {
     let colors = palette(ui);
+    let foreground = if active { colors.accent } else { colors.text };
+    let look = CommandColors {
+        rest: active.then_some(colors.hover),
+        hover: colors.hover,
+        pressed: colors.pressed,
+        glyph: foreground,
+        text: foreground,
+        min_width: 0.0,
+    };
+    styled_command_button(ui, glyph, label, look)
+}
+
+fn danger_command_button(ui: &mut Ui, glyph: char, label: &str) -> Response {
+    let colors = palette(ui);
+    let look = CommandColors {
+        rest: None,
+        hover: colors.hover,
+        pressed: colors.pressed,
+        glyph: colors.danger,
+        text: colors.text,
+        min_width: 0.0,
+    };
+    styled_command_button(ui, glyph, label, look)
+}
+
+fn primary_command_button(ui: &mut Ui, glyph: char, label: &str) -> Response {
+    let colors = palette(ui);
+    let look = CommandColors {
+        rest: Some(colors.accent),
+        hover: colors.accent.gamma_multiply(0.9),
+        pressed: colors.accent.gamma_multiply(0.8),
+        glyph: colors.on_accent,
+        text: colors.on_accent,
+        min_width: 0.0,
+    };
+    styled_command_button(ui, glyph, label, look)
+}
+
+fn menu_item(ui: &mut Ui, glyph: char, label: &str) -> Response {
+    let colors = palette(ui);
+    let look = CommandColors {
+        rest: None,
+        hover: colors.hover,
+        pressed: colors.pressed,
+        glyph: colors.text,
+        text: colors.text,
+        min_width: MENU_WIDTH,
+    };
+    styled_command_button(ui, glyph, label, look)
+}
+
+fn styled_command_button(ui: &mut Ui, glyph: char, label: &str, look: CommandColors) -> Response {
     let icon_font = theme::icon_font(ui, 16.0);
     let text = WidgetText::from(label).into_galley(
         ui,
@@ -1214,16 +1313,17 @@ fn command_button_with(
         TextStyle::Button,
     );
     let icon_width = if icon_font.is_some() { 24.0 } else { 0.0 };
-    let size = vec2(text.size().x + icon_width + 20.0, CONTROL_HEIGHT);
+    let width = (text.size().x + icon_width + 20.0).max(look.min_width);
+    let size = vec2(width, CONTROL_HEIGHT);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, ui.is_enabled(), label));
     if ui.is_rect_visible(rect) {
         let fill = if response.is_pointer_button_down_on() {
-            Some(colors.pressed)
-        } else if response.hovered() || active {
-            Some(colors.hover)
+            Some(look.pressed)
+        } else if response.hovered() {
+            Some(look.hover)
         } else {
-            None
+            look.rest
         };
         if let Some(fill) = fill {
             ui.painter().rect_filled(rect, 4.0, fill);
@@ -1236,21 +1336,31 @@ fn command_button_with(
                 Align2::LEFT_CENTER,
                 glyph,
                 font,
-                glyph_color,
+                look.glyph,
             );
         }
         let position = pos2(
             rect.left() + 10.0 + icon_width,
             center_y - text.size().y / 2.0,
         );
-        let color = if active { colors.accent } else { colors.text };
-        ui.painter().galley(position, text, color);
+        ui.painter().galley(position, text, look.text);
     }
     response
 }
 
 /// Bouton réduit à son icône : le libellé reste dans l'infobulle et pour les lecteurs d'écran.
 fn icon_button(ui: &mut Ui, glyph: char, label: &str, tooltip: &str) -> Response {
+    let color = palette(ui).text;
+    icon_button_with(ui, glyph, label, tooltip, color)
+}
+
+fn icon_button_with(
+    ui: &mut Ui,
+    glyph: char,
+    label: &str,
+    tooltip: &str,
+    color: Color32,
+) -> Response {
     let colors = palette(ui);
     let Some(font) = theme::icon_font(ui, 16.0) else {
         // Sans police d'icônes, le texte reste le seul moyen d'identifier le bouton.
@@ -1266,13 +1376,8 @@ fn icon_button(ui: &mut Ui, glyph: char, label: &str, tooltip: &str) -> Response
             ui.painter().rect_filled(rect, 4.0, colors.hover);
         }
         paint_focus(ui, &response, rect);
-        ui.painter().text(
-            rect.center(),
-            Align2::CENTER_CENTER,
-            glyph,
-            font,
-            colors.accent,
-        );
+        ui.painter()
+            .text(rect.center(), Align2::CENTER_CENTER, glyph, font, color);
     }
     response.on_hover_text(tooltip)
 }
@@ -1526,7 +1631,7 @@ mod tests {
     fn registered<'a>() -> Harness<'a, GuiApp> {
         let mut harness = harness();
         harness.step();
-        type_into(&mut harness, "Utilisateur", "alice");
+        type_into(&mut harness, "Compte", "alice");
         type_into(&mut harness, "Mot de passe maître", MASTER);
         type_into(&mut harness, "Confirmer", MASTER);
         click(&mut harness, "Créer le compte");
@@ -1556,18 +1661,22 @@ mod tests {
         let mut harness = registered();
         click(&mut harness, "Verrouiller");
         assert!(harness.state().workspace.is_none());
-        type_into(&mut harness, "Utilisateur", "alice");
+        type_into(&mut harness, "Compte", "alice");
         type_into(&mut harness, "Mot de passe maître", "mauvais mot de passe");
-        click(&mut harness, "Se connecter");
+        click(&mut harness, "Déverrouiller");
         assert!(harness.state().workspace.is_none());
-        assert!(harness.query_by_label("Identifiants invalides").is_some());
+        assert!(
+            harness
+                .query_by_label("Compte ou mot de passe incorrect")
+                .is_some()
+        );
     }
 
     #[test]
     fn registration_rejects_a_mismatched_confirmation() {
         let mut harness = harness();
         harness.step();
-        type_into(&mut harness, "Utilisateur", "alice");
+        type_into(&mut harness, "Compte", "alice");
         type_into(&mut harness, "Mot de passe maître", MASTER);
         type_into(&mut harness, "Confirmer", "autre chose");
         click(&mut harness, "Créer le compte");
@@ -1788,19 +1897,19 @@ mod tests {
         let mut harness = harness();
         harness.step();
         assert!(harness.query_by_label("Créer le compte").is_some());
-        type_into(&mut harness, "Utilisateur", "alice");
+        type_into(&mut harness, "Compte", "alice");
         type_into(&mut harness, "Mot de passe maître", MASTER);
         type_into(&mut harness, "Confirmer", MASTER);
         click(&mut harness, "Créer le compte");
         click(&mut harness, "Verrouiller");
-        assert!(harness.query_by_label("Se connecter").is_some());
+        assert!(harness.query_by_label("Déverrouiller").is_some());
     }
 
     #[test]
     fn enter_in_the_login_name_moves_to_an_empty_password() {
         let mut harness = registered();
         click(&mut harness, "Verrouiller");
-        type_into(&mut harness, "Utilisateur", "alice");
+        type_into(&mut harness, "Compte", "alice");
         harness.key_press(Key::Enter);
         harness.run_steps(3);
         assert!(harness.state().status.is_none());
@@ -2084,8 +2193,8 @@ mod tests {
         ] {
             add_entry(&mut harness, site, "p1");
         }
-        // Depuis la recherche : Ajouter, Importer, Exporter, Mot de passe maître, MCP, Supprimer.
-        for _ in 0..6 {
+        // Depuis la recherche : Ajouter, Plus, accès pour assistants IA, Supprimer.
+        for _ in 0..4 {
             harness.key_press(Key::Tab);
             harness.run_steps(2);
         }
@@ -2100,7 +2209,7 @@ mod tests {
     #[test]
     fn picked_file_fills_the_path_field() {
         let mut harness = registered();
-        click(&mut harness, "Importer");
+        open_menu_item(&mut harness, "Importer");
         let (sender, receiver) = mpsc::channel();
         harness.state_mut().file_picker = Some(receiver);
         sender.send(Some(PathBuf::from("mots.csv"))).unwrap();
@@ -2157,7 +2266,7 @@ mod tests {
         click(&mut harness, "Créer le compte");
         assert!(
             harness
-                .query_by_label("Le nom d'utilisateur doit faire de 3 à 50 caractères")
+                .query_by_label("Le nom du compte doit faire de 3 à 50 caractères")
                 .is_some()
         );
         assert!(harness.state().workspace.is_none());
@@ -2169,7 +2278,7 @@ mod tests {
         let path = dir.path().join("deja.csv");
         std::fs::write(&path, "contenu").unwrap();
         let mut harness = registered();
-        click(&mut harness, "Exporter");
+        open_menu_item(&mut harness, "Exporter");
         type_into(&mut harness, "Fichier", path.to_str().unwrap());
         click(&mut harness, "Valider");
         assert!(
@@ -2178,6 +2287,88 @@ mod tests {
                 .is_some()
         );
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "contenu");
+    }
+
+    fn open_menu_item(harness: &mut Harness<'_, GuiApp>, item: &str) {
+        click(harness, "Plus");
+        click(harness, item);
+    }
+
+    #[test]
+    fn rare_actions_are_in_the_more_menu() {
+        let mut harness = registered();
+        assert!(harness.query_by_label("Importer").is_none());
+        assert!(harness.query_by_label("Exporter").is_none());
+        click(&mut harness, "Plus");
+        assert!(harness.query_by_label("Importer").is_some());
+        assert!(harness.query_by_label("Mot de passe maître").is_some());
+        click(&mut harness, "Exporter");
+        assert!(matches!(
+            harness.state().dialog,
+            Some(Dialog::Export { .. })
+        ));
+    }
+
+    #[test]
+    fn open_menu_keeps_the_keyboard_from_the_shortcuts() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        add_entry(&mut harness, "https://b.example", "p2");
+        let selected = selected_position(&harness);
+        click(&mut harness, "Plus");
+        harness.key_press(Key::ArrowDown);
+        harness.key_press(Key::Delete);
+        harness.run_steps(3);
+        assert_eq!(selected_position(&harness), selected);
+        assert!(harness.state().dialog.is_none());
+    }
+
+    #[test]
+    fn keyboard_reaches_the_menu_items() {
+        let mut harness = registered();
+        // Depuis la recherche : Ajouter, puis Plus.
+        for _ in 0..2 {
+            harness.key_press(Key::Tab);
+            harness.run_steps(2);
+        }
+        harness.key_press(Key::Enter);
+        harness.run_steps(5);
+        assert!(harness.query_by_label("Importer").is_some());
+        harness.key_press(Key::Enter);
+        harness.run_steps(5);
+        assert!(matches!(
+            harness.state().dialog,
+            Some(Dialog::Import { .. })
+        ));
+    }
+
+    #[test]
+    fn ai_access_button_states_its_state_in_words() {
+        let harness = registered();
+        assert!(
+            harness
+                .query_by_label("Accès pour assistants IA : désactivé")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn entry_form_reveals_the_password_with_the_same_control() {
+        let mut harness = registered();
+        click(&mut harness, "Ajouter");
+        click(&mut harness, "Afficher");
+        assert!(matches!(
+            harness.state().dialog,
+            Some(Dialog::Entry { revealed: true, .. })
+        ));
+        assert!(harness.query_by_label("Masquer").is_some());
+    }
+
+    #[test]
+    fn login_screen_shows_the_logo() {
+        let mut harness = harness();
+        harness.step();
+        assert!(harness.state().logo.is_some());
     }
 
     #[test]

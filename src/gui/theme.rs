@@ -16,6 +16,7 @@ const ICONS: &str = "icons";
 /// Glyphes de la police Segoe Fluent Icons.
 pub mod icon {
     pub const ADD: char = '\u{E710}';
+    pub const MORE: char = '\u{E712}';
     pub const IMPORT: char = '\u{E8B5}';
     pub const EXPORT: char = '\u{EDE1}';
     pub const KEY: char = '\u{E8D7}';

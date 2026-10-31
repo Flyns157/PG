@@ -240,7 +240,7 @@ impl App {
             None => self.store.add(&workspace.session, fields)?,
         };
         Ok(Submitted::Saved {
-            message: format!("{} enregistré", entry.fields.url),
+            message: format!("Entrée enregistrée : {}", entry.fields.url),
             id: entry.id.clone(),
         })
     }
@@ -641,17 +641,14 @@ fn entry_fields(form: &Form) -> EntryFields {
 
 fn login_screen() -> Screen {
     let hint = "Entrée : valider · Tab : champ suivant · F2 : créer un compte · Échap : quitter";
-    let fields = vec![
-        Field::text("Utilisateur"),
-        Field::secret("Mot de passe maître"),
-    ];
+    let fields = vec![Field::text("Compte"), Field::secret("Mot de passe maître")];
     Screen::Form(FormKind::Login, Form::new("PG · Connexion", hint, fields))
 }
 
 fn register_screen() -> Screen {
     let hint = "Entrée : valider · Tab : champ suivant · Ctrl+R : afficher · F2 : se connecter · Échap : quitter";
     let fields = vec![
-        Field::text("Utilisateur"),
+        Field::text("Compte"),
         Field::secret("Mot de passe maître"),
         Field::secret("Confirmer"),
     ];
@@ -950,7 +947,7 @@ mod tests {
         assert!(app.workspace.is_none());
         assert!(!screen(&app).contains("https://a.example"));
         fill(&mut app, &["alice", "mauvais mot de passe"]);
-        assert!(screen(&app).contains("Identifiants invalides"));
+        assert!(screen(&app).contains("Compte ou mot de passe incorrect"));
         assert!(app.workspace.is_none());
     }
 

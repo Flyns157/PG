@@ -301,7 +301,7 @@ impl Store {
 pub fn validate_username(username: &str) -> Result<()> {
     if !(3..=50).contains(&username.trim().chars().count()) {
         return Err(Error::Validation(
-            "Le nom d'utilisateur doit faire de 3 à 50 caractères".into(),
+            "Le nom du compte doit faire de 3 à 50 caractères".into(),
         ));
     }
     Ok(())

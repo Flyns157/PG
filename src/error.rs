@@ -4,9 +4,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Identifiants invalides")]
+    #[error("Compte ou mot de passe incorrect")]
     InvalidCredentials,
-    #[error("Ce nom d'utilisateur existe déjà")]
+    #[error("Ce compte existe déjà")]
     UsernameTaken,
     #[error("{0}")]
     Validation(String),

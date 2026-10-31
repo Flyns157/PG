@@ -71,9 +71,9 @@ PG importe aussi les exports CSV de mots de passe de Chromium (`name,url,usernam
 
 ## Serveur MCP intégré
 
-PG peut exposer le coffre à un client IA via MCP. Le serveur est désactivé à chaque lancement. Pour l'activer ou le désactiver, une fois le coffre déverrouillé, utilisez le bouton **MCP** en GUI ou la touche `p` en TUI. Il écoute sur `http://127.0.0.1:39517/mcp`.
+PG peut exposer le coffre à un client IA via MCP. Le serveur est désactivé à chaque lancement. Pour l'activer ou le désactiver, une fois le coffre déverrouillé, utilisez le bouton **Accès pour assistants IA** en GUI ou la touche `p` en TUI. Il écoute sur `http://127.0.0.1:39517/mcp`.
 
-Chaque activation crée un nouveau jeton et le copie dans le presse-papiers (bouton **Jeton MCP** ou touche `P` pour le recopier). Le client doit donc être reconfiguré à chaque activation :
+Chaque activation crée un nouveau jeton et le copie dans le presse-papiers (bouton **Copier le jeton d'accès** ou touche `P` pour le recopier). Le client doit donc être reconfiguré à chaque activation :
 
 ```
 claude mcp add --transport http pg http://127.0.0.1:39517/mcp --header "Authorization: Bearer <jeton>"

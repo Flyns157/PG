@@ -131,10 +131,10 @@ pub fn toggle(
     waker: Waker,
 ) -> Result<String, String> {
     if server.take().is_some() {
-        return Ok("Serveur MCP désactivé".to_owned());
+        return Ok("Accès pour assistants IA désactivé".to_owned());
     }
     let started = McpServer::start(waker)
-        .map_err(|error| format!("Serveur MCP non démarré (port {PORT}) : {error}"))?;
+        .map_err(|error| format!("Accès pour assistants IA non démarré (port {PORT}) : {error}"))?;
     let message = copy_token(&started, clipboard);
     *server = Some(started);
     Ok(message)
@@ -143,11 +143,11 @@ pub fn toggle(
 pub fn copy_token(server: &McpServer, clipboard: &mut SecretClipboard) -> String {
     match clipboard.copy(server.token()) {
         Ok(()) => format!(
-            "MCP actif sur {} · jeton copié (effacé dans 30 s)",
+            "Accès pour assistants IA actif sur {} · jeton copié (effacé dans 30 s)",
             server.url()
         ),
         Err(_) => format!(
-            "MCP actif sur {} · jeton : {}",
+            "Accès pour assistants IA actif sur {} · jeton : {}",
             server.url(),
             server.token()
         ),
@@ -185,7 +185,7 @@ fn run_tool(
             copy(&entry.fields.password)
                 .map_err(|error| format!("Presse-papiers indisponible : {error}"))?;
             notices.push(format!(
-                "MCP : mot de passe de {} copié (effacé dans 30 s)",
+                "Assistant IA : mot de passe de {} copié (effacé dans 30 s)",
                 entry.fields.url
             ));
             Ok("Mot de passe copié dans le presse-papiers, effacé dans 30 s".to_owned())
