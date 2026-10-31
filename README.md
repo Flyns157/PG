@@ -16,6 +16,10 @@ Il faut [Rust](https://rustup.rs) stable (testé avec la 1.99) et un compilateur
 
 L'exécutable se trouve dans `target/release/`. Sous Windows, il ne dépend d'aucune DLL Visual C++. Sous Linux, la GUI a besoin des bibliothèques système de X11 ou Wayland.
 
+## Apparence
+
+La GUI reprend le style de Windows 11 et suit le mode clair ou sombre du système. Sous Windows, elle utilise les polices Segoe UI et Segoe Fluent Icons déjà installées ; ailleurs, elle garde sa police intégrée et ses boutons restent sans icône. La TUI suit les couleurs du terminal.
+
 ## Utilisation
 
 ```

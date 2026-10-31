@@ -1,12 +1,15 @@
 //! Interface graphique.
 
+mod theme;
+
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 use eframe::egui;
 use egui::{
-    Align, Button, Color32, Context, Grid, Key, Layout, Modal, Modifiers, RichText, ScrollArea,
-    TextEdit, Ui, vec2,
+    Align, Align2, Button, Context, CornerRadius, Frame, Key, Layout, Margin, Modal, Modifiers,
+    Rect, Response, RichText, ScrollArea, Sense, Stroke, TextEdit, TextStyle, TextWrapMode, Ui,
+    WidgetInfo, WidgetText, WidgetType, pos2, vec2,
 };
 use zeroize::Zeroizing;
 
@@ -19,10 +22,20 @@ use crate::generator::{DEFAULT_LENGTH, generate_password};
 use crate::mcp::{self, McpServer};
 use crate::store::Store;
 use crate::workspace::Workspace;
+use theme::{icon, palette};
 
 const TICK: Duration = Duration::from_secs(1);
-const LOGIN_FORM_WIDTH: f32 = 450.0;
-const LIST_ROW_HEIGHT: f32 = 26.0;
+const LOGIN_CARD_WIDTH: f32 = 340.0;
+const LIST_ROW_HEIGHT: f32 = 48.0;
+const CONTROL_HEIGHT: f32 = 32.0;
+// Bouton de verrouillage, libellé et champ de recherche.
+const TITLE_RESERVED_WIDTH: f32 = 350.0;
+const DETAIL_LABEL_WIDTH: f32 = 100.0;
+// Marges de la carte (2 × 16) et bordure.
+const DETAIL_CARD_CHROME: f32 = 34.0;
+const DIALOG_WIDTH: f32 = 460.0;
+const DIALOG_BUTTON_WIDTH: f32 = 130.0;
+const PASSWORD_TOOLS_WIDTH: f32 = 190.0;
 
 const ICON_PNG: &[u8] = include_bytes!("../../assets/icon.png");
 
@@ -30,8 +43,8 @@ pub fn run(store: Store) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("PG")
-            .with_inner_size([960.0, 600.0])
-            .with_min_inner_size([640.0, 400.0])
+            .with_inner_size([1040.0, 680.0])
+            .with_min_inner_size([640.0, 480.0])
             .with_icon(
                 eframe::icon_data::from_png_bytes(ICON_PNG).expect("icône intégrée invalide"),
             ),
@@ -40,7 +53,10 @@ pub fn run(store: Store) -> eframe::Result {
     eframe::run_native(
         "PG",
         options,
-        Box::new(|_| Ok(Box::new(GuiApp::new(store)))),
+        Box::new(|creation| {
+            theme::apply(&creation.egui_ctx);
+            Ok(Box::new(GuiApp::new(store)))
+        }),
     )
 }
 
@@ -162,59 +178,61 @@ impl GuiApp {
     fn login_ui(&mut self, ctx: &Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.add_space(ui.available_height() * 0.2);
-                ui.heading(if self.login.registering {
-                    "PG · Créer un compte"
-                } else {
-                    "PG · Connexion"
+                ui.add_space((ui.available_height() * 0.5 - 200.0).max(16.0));
+                card(ui).inner_margin(Margin::same(24)).show(ui, |ui| {
+                    ui.set_width(LOGIN_CARD_WIDTH);
+                    ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                        self.login_form_ui(ui);
+                    });
                 });
-                ui.add_space(16.0);
-                let mut submitted = false;
-                ui.horizontal(|ui| {
-                    ui.add_space(((ui.available_width() - LOGIN_FORM_WIDTH) / 2.0).max(0.0));
-                    Grid::new("login")
-                        .num_columns(2)
-                        .spacing([8.0, 8.0])
-                        .show(ui, |ui| {
-                            text_row(ui, "Utilisateur", &mut self.login.username);
-                            submitted |= secret_row(
-                                ui,
-                                "Mot de passe maître",
-                                &mut self.login.password,
-                                false,
-                            )
-                            .submitted;
-                            if self.login.registering {
-                                submitted |=
-                                    secret_row(ui, "Confirmer", &mut self.login.confirm, false)
-                                        .submitted;
-                            }
-                        });
-                });
-                ui.add_space(8.0);
-                submitted |= ui
-                    .button(if self.login.registering {
-                        "Créer le compte"
-                    } else {
-                        "Se connecter"
-                    })
-                    .clicked();
-                let other = if self.login.registering {
-                    "J'ai déjà un compte"
-                } else {
-                    "Créer un compte"
-                };
-                if ui.link(other).clicked() {
-                    self.login.registering = !self.login.registering;
-                    self.status = None;
-                }
-                if submitted {
-                    self.submit_login();
-                }
-                ui.add_space(8.0);
-                status_label(ui, self.status.as_ref());
             });
         });
+    }
+
+    fn login_form_ui(&mut self, ui: &mut Ui) {
+        let registering = self.login.registering;
+        ui.label(RichText::new("PG").heading().size(28.0));
+        ui.label(
+            RichText::new(if registering {
+                "Créer un coffre protégé par un mot de passe maître"
+            } else {
+                "Déverrouiller votre coffre"
+            })
+            .color(palette(ui).secondary),
+        );
+        ui.add_space(12.0);
+        let mut submitted = false;
+        text_field(ui, "Utilisateur", &mut self.login.username);
+        submitted |= secret_field(ui, "Mot de passe maître", &mut self.login.password);
+        if registering {
+            submitted |= secret_field(ui, "Confirmer", &mut self.login.confirm);
+        }
+        ui.add_space(4.0);
+        submitted |= primary_button(
+            ui,
+            if registering {
+                "Créer le compte"
+            } else {
+                "Se connecter"
+            },
+            ui.available_width(),
+        )
+        .clicked();
+        ui.vertical_centered(|ui| {
+            let other = if registering {
+                "J'ai déjà un compte"
+            } else {
+                "Créer un compte"
+            };
+            if ui.link(other).clicked() {
+                self.login.registering = !registering;
+                self.status = None;
+            }
+        });
+        if submitted {
+            self.submit_login();
+        }
+        info_bar(ui, self.status.as_ref());
     }
 
     fn submit_login(&mut self) {
@@ -240,52 +258,105 @@ impl GuiApp {
     }
 
     fn vault_ui(&mut self, ctx: &Context) {
-        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| self.toolbar_ui(ui));
-        egui::TopBottomPanel::bottom("status")
-            .show(ctx, |ui| status_label(ui, self.status.as_ref()));
+        let pane = |top: i8, bottom: i8| {
+            Frame::new()
+                .fill(ctx.style().visuals.panel_fill)
+                .inner_margin(Margin {
+                    left: 16,
+                    right: 16,
+                    top,
+                    bottom,
+                })
+        };
+        egui::TopBottomPanel::top("toolbar")
+            .frame(pane(12, 8))
+            .show_separator_line(false)
+            .show(ctx, |ui| self.toolbar_ui(ui));
+        if self.status.is_some() {
+            egui::TopBottomPanel::bottom("status")
+                .frame(pane(0, 12))
+                .show_separator_line(false)
+                .show(ctx, |ui| info_bar(ui, self.status.as_ref()));
+        }
         egui::SidePanel::left("entries")
             .default_width(380.0)
+            .frame(pane(0, 12))
+            .show_separator_line(false)
             .show(ctx, |ui| self.list_ui(ui));
-        egui::CentralPanel::default().show(ctx, |ui| self.detail_ui(ui));
+        egui::CentralPanel::default()
+            .frame(pane(0, 12))
+            .show(ctx, |ui| self.detail_ui(ui));
         self.dialog_ui(ctx);
     }
 
     fn toolbar_ui(&mut self, ui: &mut Ui) {
+        let mut lock = false;
         ui.horizontal(|ui| {
             if let Some(workspace) = &mut self.workspace {
-                ui.strong(format!(
-                    "{} · {} entrée(s)",
-                    workspace.session.username(),
-                    workspace.all_entries().len()
-                ));
-                let label = ui.label("Recherche");
-                let search = ui
-                    .add(TextEdit::singleline(&mut self.search).desired_width(220.0))
-                    .labelled_by(label.id)
-                    .on_hover_text("Ctrl+F");
-                if self.dialog.is_none()
-                    && ui.input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::F))
-                {
-                    search.request_focus();
-                }
-                if search.changed() {
-                    workspace.set_query(&self.search);
-                    self.revealed = false;
-                }
+                ui.scope(|ui| {
+                    // Un nom très long est tronqué plutôt que de pousser la recherche hors de la fenêtre.
+                    ui.set_max_width((ui.available_width() - TITLE_RESERVED_WIDTH).max(80.0));
+                    ui.add(
+                        egui::Label::new(RichText::new(workspace.session.username()).heading())
+                            .truncate(),
+                    );
+                });
+                lock = icon_button(ui, icon::LOCK, "Verrouiller").clicked();
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let search = ui
+                        .add(
+                            TextEdit::singleline(&mut self.search)
+                                .desired_width(220.0)
+                                .margin(vec2(10.0, 6.0)),
+                        )
+                        .on_hover_text("Ctrl+F");
+                    let label = ui.label("Recherche");
+                    let search = search.labelled_by(label.id);
+                    if self.dialog.is_none()
+                        && ui.input_mut(|input| input.consume_key(Modifiers::COMMAND, Key::F))
+                    {
+                        search.request_focus();
+                    }
+                    if search.changed() {
+                        workspace.set_query(&self.search);
+                        self.revealed = false;
+                    }
+                });
             }
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.button("Verrouiller").clicked() {
-                    self.lock();
-                    return;
+        });
+        if lock {
+            self.lock();
+            return;
+        }
+        card(ui).inner_margin(Margin::same(4)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                if command_button(ui, icon::ADD, "Ajouter", false).clicked() {
+                    self.dialog = Some(Dialog::Entry {
+                        id: None,
+                        fields: EntryFields::default(),
+                        revealed: false,
+                    });
                 }
-                if let Some(server) = &self.mcp
-                    && ui.button("Jeton MCP").on_hover_text(server.url()).clicked()
-                {
-                    let message = mcp::copy_token(server, &mut self.clipboard);
-                    self.set_info(message);
+                if command_button(ui, icon::IMPORT, "Importer", false).clicked() {
+                    self.dialog = Some(Dialog::Import {
+                        path: String::new(),
+                    });
                 }
-                if ui
-                    .selectable_label(self.mcp.is_some(), "MCP")
+                if command_button(ui, icon::EXPORT, "Exporter", false).clicked() {
+                    self.dialog = Some(Dialog::Export {
+                        path: String::new(),
+                    });
+                }
+                if command_button(ui, icon::KEY, "Mot de passe maître", false).clicked() {
+                    self.dialog = Some(Dialog::ChangeMaster {
+                        current: Zeroizing::default(),
+                        new: Zeroizing::default(),
+                        confirm: Zeroizing::default(),
+                    });
+                }
+                if command_button(ui, icon::CONNECT, "MCP", self.mcp.is_some())
                     .on_hover_text("Active ou désactive le serveur MCP local")
                     .clicked()
                 {
@@ -296,29 +367,13 @@ impl GuiApp {
                         Err(error) => self.set_error(error),
                     }
                 }
-                if ui.button("Mot de passe maître").clicked() {
-                    self.dialog = Some(Dialog::ChangeMaster {
-                        current: Zeroizing::default(),
-                        new: Zeroizing::default(),
-                        confirm: Zeroizing::default(),
-                    });
-                }
-                if ui.button("Exporter").clicked() {
-                    self.dialog = Some(Dialog::Export {
-                        path: String::new(),
-                    });
-                }
-                if ui.button("Importer").clicked() {
-                    self.dialog = Some(Dialog::Import {
-                        path: String::new(),
-                    });
-                }
-                if ui.button("Ajouter").clicked() {
-                    self.dialog = Some(Dialog::Entry {
-                        id: None,
-                        fields: EntryFields::default(),
-                        revealed: false,
-                    });
+                if let Some(server) = &self.mcp
+                    && command_button(ui, icon::COPY, "Jeton MCP", false)
+                        .on_hover_text(server.url())
+                        .clicked()
+                {
+                    let message = mcp::copy_token(server, &mut self.clipboard);
+                    self.set_info(message);
                 }
             });
         });
@@ -345,15 +400,21 @@ impl GuiApp {
             self.revealed = false;
         }
         let mut clicked = None;
+        ui.label(
+            RichText::new(entry_count(workspace.visible().count()))
+                .small()
+                .color(palette(ui).secondary),
+        );
         ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             // Lignes jointives : toute la largeur est cliquable, sans trou entre deux entrées.
             ui.spacing_mut().item_spacing.y = 0.0;
             for (position, entry) in workspace.visible().enumerate() {
-                let text = format!("{} ({})", entry.fields.url, entry.fields.username);
-                let row = Button::selectable(position == selected, text)
-                    .truncate()
-                    .min_size(vec2(ui.available_width(), LIST_ROW_HEIGHT));
-                let response = ui.add(row);
+                let response = entry_row(
+                    ui,
+                    &entry.fields.url,
+                    &entry.fields.username,
+                    position == selected,
+                );
                 if response.clicked() {
                     clicked = Some(position);
                 }
@@ -375,56 +436,98 @@ impl GuiApp {
             .and_then(|workspace| workspace.selected())
             .cloned()
         else {
-            ui.label("Aucune entrée");
+            ui.add_space(24.0);
+            ui.vertical_centered(|ui| {
+                ui.label(RichText::new("Aucune entrée").color(palette(ui).secondary));
+            });
             return;
         };
         let fields = &entry.fields;
-        Grid::new("detail")
-            .num_columns(2)
-            .spacing([12.0, 8.0])
-            .show(ui, |ui| {
-                detail_row(ui, "Site", &fields.url);
-                detail_row(ui, "Identifiant", &fields.username);
-                ui.label("Mot de passe");
-                ui.monospace(if self.revealed {
-                    fields.password.as_str()
-                } else {
-                    "••••••••"
+        let revealed = self.revealed;
+        ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    // Disposition de droite à gauche : le dernier ajouté s'affiche en premier.
+                    if command_button(ui, icon::DELETE, "Supprimer", false).clicked() {
+                        self.dialog = Some(Dialog::Delete {
+                            id: entry.id.clone(),
+                            site: fields.url.clone(),
+                        });
+                    }
+                    if command_button(ui, icon::EDIT, "Modifier", false).clicked() {
+                        self.dialog = Some(Dialog::Entry {
+                            id: Some(entry.id.clone()),
+                            fields: fields.clone(),
+                            revealed: false,
+                        });
+                    }
+                    ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                        ui.add(egui::Label::new(RichText::new(&fields.url).heading()).truncate());
+                    });
                 });
-                ui.end_row();
-                detail_row(ui, "E-mail", &fields.email);
-                detail_row(ui, "Téléphone", &fields.phone);
-                detail_row(ui, "Notes", &fields.notes);
-                detail_row(ui, "Créée le", &local_date(&entry.created_at));
-                detail_row(ui, "Modifiée le", &local_date(&entry.updated_at));
             });
-        ui.add_space(12.0);
-        ui.horizontal_wrapped(|ui| {
-            if ui
-                .button(if self.revealed { "Masquer" } else { "Afficher" })
-                .clicked()
-            {
-                self.revealed = !self.revealed;
-            }
-            if ui.button("Copier le mot de passe").clicked() {
-                self.copy(&fields.password, "Mot de passe copié (effacé dans 30 s)");
-            }
-            if ui.button("Copier l'identifiant").clicked() {
-                self.copy(&fields.username, "Identifiant copié (effacé dans 30 s)");
-            }
-            if ui.button("Modifier").clicked() {
-                self.dialog = Some(Dialog::Entry {
-                    id: Some(entry.id.clone()),
-                    fields: fields.clone(),
-                    revealed: false,
-                });
-            }
-            if ui.button("Supprimer").clicked() {
-                self.dialog = Some(Dialog::Delete {
-                    id: entry.id.clone(),
-                    site: fields.url.clone(),
-                });
-            }
+            ui.add_space(4.0);
+            // La carte occupe toute la hauteur restante.
+            let card_height = ui.available_height() - DETAIL_CARD_CHROME;
+            card(ui).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.set_min_height(card_height);
+                ui.spacing_mut().item_spacing.y = 12.0;
+                detail_line(
+                    ui,
+                    "Identifiant",
+                    |ui| {
+                        if icon_button(ui, icon::COPY, "Copier l'identifiant").clicked() {
+                            self.copy(&fields.username, "Identifiant copié (effacé dans 30 s)");
+                        }
+                    },
+                    |ui| detail_value(ui, &fields.username),
+                );
+                detail_line(
+                    ui,
+                    "Mot de passe",
+                    |ui| {
+                        // Disposition de droite à gauche : le dernier ajouté s'affiche en premier.
+                        if icon_button(ui, icon::COPY, "Copier le mot de passe").clicked() {
+                            self.copy(&fields.password, "Mot de passe copié (effacé dans 30 s)");
+                        }
+                        let (glyph, label) = if revealed {
+                            (icon::HIDE, "Masquer")
+                        } else {
+                            (icon::SHOW, "Afficher")
+                        };
+                        if icon_button(ui, glyph, label).clicked() {
+                            self.revealed = !revealed;
+                        }
+                    },
+                    |ui| {
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(if revealed {
+                                    fields.password.as_str()
+                                } else {
+                                    "••••••••"
+                                })
+                                .monospace(),
+                            )
+                            .wrap(),
+                        );
+                    },
+                );
+                for (label, value) in [
+                    ("E-mail", fields.email.as_str()),
+                    ("Téléphone", fields.phone.as_str()),
+                    ("Notes", fields.notes.as_str()),
+                    ("Créée le", &local_date(&entry.created_at)),
+                    ("Modifiée le", &local_date(&entry.updated_at)),
+                ] {
+                    // Un champ vide n'apporte rien à l'écran de détail.
+                    if !value.is_empty() {
+                        detail_line(ui, label, |_| {}, |ui| detail_value(ui, value));
+                    }
+                }
+            });
         });
     }
 
@@ -441,23 +544,23 @@ impl GuiApp {
         };
         let error = self.dialog_error.clone();
         let modal = Modal::new(egui::Id::new("dialog")).show(ctx, |ui| {
-            ui.set_width(460.0);
+            ui.set_width(DIALOG_WIDTH);
             let mut action = dialog_content(ui, &mut dialog);
             if let Some(error) = &error {
-                ui.colored_label(Color32::LIGHT_RED, error);
+                ui.label(RichText::new(error).color(palette(ui).danger));
             }
             ui.add_space(8.0);
-            ui.horizontal(|ui| {
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let submit = if matches!(dialog, Dialog::Delete { .. }) {
                     "Confirmer la suppression"
                 } else {
                     "Valider"
                 };
-                if ui.button(submit).clicked() {
-                    action = DialogAction::Submit;
-                }
-                if ui.button("Annuler").clicked() {
+                if secondary_button(ui, "Annuler").clicked() {
                     action = DialogAction::Close;
+                }
+                if primary_button(ui, submit, DIALOG_BUTTON_WIDTH).clicked() {
+                    action = DialogAction::Submit;
                 }
             });
             action
@@ -555,31 +658,27 @@ fn dialog_content(ui: &mut Ui, dialog: &mut Dialog) -> DialogAction {
             } else {
                 "Nouvelle entrée"
             });
-            Grid::new("entry")
-                .num_columns(2)
-                .spacing([8.0, 8.0])
-                .show(ui, |ui| {
-                    text_row(ui, "Site", &mut fields.url);
-                    text_row(ui, "Identifiant", &mut fields.username);
-                    let label = ui.label("Mot de passe");
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            TextEdit::singleline(&mut fields.password)
-                                .password(!*revealed)
-                                .desired_width(240.0),
-                        )
-                        .labelled_by(label.id);
-                        ui.checkbox(revealed, "Afficher");
-                        if ui.button("Générer").clicked() {
-                            fields.password = generate_password(DEFAULT_LENGTH);
-                            *revealed = true;
-                        }
-                    });
-                    ui.end_row();
-                    text_row(ui, "E-mail", &mut fields.email);
-                    text_row(ui, "Téléphone", &mut fields.phone);
-                    text_row(ui, "Notes", &mut fields.notes);
-                });
+            ui.add_space(4.0);
+            text_field(ui, "Site", &mut fields.url);
+            text_field(ui, "Identifiant", &mut fields.username);
+            let label = ui.label("Mot de passe");
+            ui.horizontal(|ui| {
+                ui.add(
+                    TextEdit::singleline(&mut fields.password)
+                        .password(!*revealed)
+                        .desired_width(ui.available_width() - PASSWORD_TOOLS_WIDTH)
+                        .margin(vec2(10.0, 6.0)),
+                )
+                .labelled_by(label.id);
+                ui.checkbox(revealed, "Afficher");
+                if ui.button("Générer").clicked() {
+                    fields.password = generate_password(DEFAULT_LENGTH);
+                    *revealed = true;
+                }
+            });
+            text_field(ui, "E-mail", &mut fields.email);
+            text_field(ui, "Téléphone", &mut fields.phone);
+            text_field(ui, "Notes", &mut fields.notes);
         }
         Dialog::Delete { site, .. } => {
             ui.heading("Supprimer l'entrée");
@@ -591,30 +690,25 @@ fn dialog_content(ui: &mut Ui, dialog: &mut Dialog) -> DialogAction {
             confirm,
         } => {
             ui.heading("Changer le mot de passe maître");
-            Grid::new("master")
-                .num_columns(2)
-                .spacing([8.0, 8.0])
-                .show(ui, |ui| {
-                    submitted |= secret_row(ui, "Actuel", current, false).submitted;
-                    submitted |= secret_row(ui, "Nouveau", new, false).submitted;
-                    submitted |= secret_row(ui, "Confirmer", confirm, false).submitted;
-                });
+            ui.add_space(4.0);
+            submitted |= secret_field(ui, "Actuel", current);
+            submitted |= secret_field(ui, "Nouveau", new);
+            submitted |= secret_field(ui, "Confirmer", confirm);
         }
         Dialog::Import { path } => {
             ui.heading("Importer un CSV");
-            Grid::new("import")
-                .num_columns(2)
-                .show(ui, |ui| text_row(ui, "Fichier", path));
+            ui.add_space(4.0);
+            text_field(ui, "Fichier", path);
         }
         Dialog::Export { path } => {
             ui.heading("Exporter en CSV");
-            ui.colored_label(
-                Color32::YELLOW,
-                "L'export est EN CLAIR : tout lecteur du fichier verra les mots de passe.",
+            ui.label(
+                RichText::new(
+                    "L'export est EN CLAIR : tout lecteur du fichier verra les mots de passe.",
+                )
+                .color(palette(ui).warning),
             );
-            Grid::new("export")
-                .num_columns(2)
-                .show(ui, |ui| text_row(ui, "Fichier", path));
+            text_field(ui, "Fichier", path);
         }
     }
     if submitted {
@@ -624,54 +718,244 @@ fn dialog_content(ui: &mut Ui, dialog: &mut Dialog) -> DialogAction {
     }
 }
 
-struct RowResponse {
-    submitted: bool,
+fn entry_count(count: usize) -> String {
+    let plural = if count > 1 { "s" } else { "" };
+    format!("{count} entrée{plural}")
 }
 
-fn text_row(ui: &mut Ui, label: &str, value: &mut String) {
+fn card(ui: &Ui) -> Frame {
+    let colors = palette(ui);
+    Frame::new()
+        .fill(colors.card)
+        .stroke(Stroke::new(1.0_f32, colors.stroke))
+        .corner_radius(CornerRadius::same(8))
+        .inner_margin(Margin::same(16))
+}
+
+fn primary_button(ui: &mut Ui, label: &str, width: f32) -> Response {
+    let colors = palette(ui);
+    ui.add_sized(
+        vec2(width, CONTROL_HEIGHT),
+        Button::new(RichText::new(label).color(colors.on_accent))
+            .fill(colors.accent)
+            .stroke(Stroke::NONE),
+    )
+}
+
+fn secondary_button(ui: &mut Ui, label: &str) -> Response {
+    ui.add_sized(
+        vec2(DIALOG_BUTTON_WIDTH, CONTROL_HEIGHT),
+        Button::new(label),
+    )
+}
+
+/// Bouton de barre de commandes : icône d'accent et texte, sans fond tant qu'il n'est pas survolé.
+fn command_button(ui: &mut Ui, glyph: char, label: &str, active: bool) -> Response {
+    let colors = palette(ui);
+    let icon_font = theme::icon_font(ui, 16.0);
+    let text = WidgetText::from(label).into_galley(
+        ui,
+        Some(TextWrapMode::Extend),
+        f32::INFINITY,
+        TextStyle::Button,
+    );
+    let icon_width = if icon_font.is_some() { 24.0 } else { 0.0 };
+    let size = vec2(text.size().x + icon_width + 20.0, CONTROL_HEIGHT);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, ui.is_enabled(), label));
+    if ui.is_rect_visible(rect) {
+        let fill = if response.is_pointer_button_down_on() {
+            Some(colors.pressed)
+        } else if response.hovered() || active {
+            Some(colors.hover)
+        } else {
+            None
+        };
+        if let Some(fill) = fill {
+            ui.painter().rect_filled(rect, 4.0, fill);
+        }
+        paint_focus(ui, &response, rect);
+        let center_y = rect.center().y;
+        if let Some(font) = icon_font {
+            ui.painter().text(
+                pos2(rect.left() + 10.0, center_y),
+                Align2::LEFT_CENTER,
+                glyph,
+                font,
+                colors.accent,
+            );
+        }
+        let position = pos2(
+            rect.left() + 10.0 + icon_width,
+            center_y - text.size().y / 2.0,
+        );
+        let color = if active { colors.accent } else { colors.text };
+        ui.painter().galley(position, text, color);
+    }
+    response
+}
+
+/// Bouton réduit à son icône : le libellé reste dans l'infobulle et pour les lecteurs d'écran.
+fn icon_button(ui: &mut Ui, glyph: char, label: &str) -> Response {
+    let colors = palette(ui);
+    let Some(font) = theme::icon_font(ui, 16.0) else {
+        // Sans police d'icônes, le texte reste le seul moyen d'identifier le bouton.
+        return ui.button(label);
+    };
+    let size = vec2(CONTROL_HEIGHT, CONTROL_HEIGHT);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, ui.is_enabled(), label));
+    if ui.is_rect_visible(rect) {
+        if response.is_pointer_button_down_on() {
+            ui.painter().rect_filled(rect, 4.0, colors.pressed);
+        } else if response.hovered() {
+            ui.painter().rect_filled(rect, 4.0, colors.hover);
+        }
+        paint_focus(ui, &response, rect);
+        ui.painter().text(
+            rect.center(),
+            Align2::CENTER_CENTER,
+            glyph,
+            font,
+            colors.accent,
+        );
+    }
+    response.on_hover_text(label)
+}
+
+/// Ligne de liste à la manière d'un volet de navigation : une barre d'accent marque la sélection.
+fn entry_row(ui: &mut Ui, site: &str, username: &str, selected: bool) -> Response {
+    let colors = palette(ui);
+    let size = vec2(ui.available_width(), LIST_ROW_HEIGHT);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    response.widget_info(|| {
+        WidgetInfo::selected(
+            WidgetType::SelectableLabel,
+            ui.is_enabled(),
+            selected,
+            format!("{site} ({username})"),
+        )
+    });
+    if ui.is_rect_visible(rect) {
+        let inner = rect.shrink2(vec2(0.0, 2.0));
+        if selected || response.hovered() {
+            ui.painter().rect_filled(inner, 4.0, colors.hover);
+        }
+        if selected {
+            let bar =
+                Rect::from_center_size(pos2(inner.left() + 1.5, inner.center().y), vec2(3.0, 18.0));
+            ui.painter().rect_filled(bar, 2.0, colors.accent);
+        }
+        paint_focus(ui, &response, inner);
+        let width = inner.width() - 24.0;
+        let left = inner.left() + 12.0;
+        let line = |text: &str, style: TextStyle| {
+            WidgetText::from(text).into_galley(ui, Some(TextWrapMode::Truncate), width, style)
+        };
+        ui.painter().galley(
+            pos2(left, inner.top() + 5.0),
+            line(site, TextStyle::Body),
+            colors.text,
+        );
+        ui.painter().galley(
+            pos2(left, inner.top() + 24.0),
+            line(username, TextStyle::Small),
+            colors.secondary,
+        );
+    }
+    response
+}
+
+fn paint_focus(ui: &Ui, response: &Response, rect: Rect) {
+    if response.has_focus() {
+        ui.painter().rect_stroke(
+            rect,
+            4.0,
+            Stroke::new(2.0_f32, palette(ui).text),
+            egui::StrokeKind::Inside,
+        );
+    }
+}
+
+fn text_field(ui: &mut Ui, label: &str, value: &mut String) {
     let label = ui.label(label);
-    ui.add(TextEdit::singleline(value).desired_width(320.0))
-        .labelled_by(label.id);
-    ui.end_row();
+    ui.add(
+        TextEdit::singleline(value)
+            .desired_width(f32::INFINITY)
+            .margin(vec2(10.0, 6.0)),
+    )
+    .labelled_by(label.id);
 }
 
-fn secret_row(
-    ui: &mut Ui,
-    label: &str,
-    value: &mut Zeroizing<String>,
-    revealed: bool,
-) -> RowResponse {
+/// Renvoie vrai si la touche Entrée valide le champ.
+fn secret_field(ui: &mut Ui, label: &str, value: &mut Zeroizing<String>) -> bool {
     let label = ui.label(label);
     let response = ui
         .add(
             TextEdit::singleline(&mut **value)
-                .password(!revealed)
-                .desired_width(320.0),
+                .password(true)
+                .desired_width(f32::INFINITY)
+                .margin(vec2(10.0, 6.0)),
         )
         .labelled_by(label.id);
-    ui.end_row();
-    RowResponse {
-        submitted: response.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter)),
-    }
+    response.lost_focus() && ui.input(|input| input.key_pressed(Key::Enter))
 }
 
-fn detail_row(ui: &mut Ui, label: &str, value: &str) {
-    ui.label(label);
-    ui.add(egui::Label::new(RichText::new(value)).wrap());
-    ui.end_row();
+fn field_name(ui: &mut Ui, label: &str) {
+    ui.label(RichText::new(label).color(palette(ui).secondary));
 }
 
-fn status_label(ui: &mut Ui, status: Option<&(String, bool)>) {
-    if let Some((message, is_error)) = status {
-        ui.colored_label(
-            if *is_error {
-                Color32::LIGHT_RED
-            } else {
-                Color32::LIGHT_GREEN
+/// Ligne de la fiche : nom du champ, valeur, puis boutons alignés en fin de ligne.
+fn detail_line(
+    ui: &mut Ui,
+    label: &str,
+    buttons: impl FnOnce(&mut Ui),
+    value: impl FnOnce(&mut Ui),
+) {
+    ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(
+            vec2(DETAIL_LABEL_WIDTH, CONTROL_HEIGHT),
+            Layout::left_to_right(Align::Center),
+            |ui| {
+                ui.set_min_width(DETAIL_LABEL_WIDTH);
+                field_name(ui, label);
             },
-            message,
         );
-    }
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            buttons(ui);
+            ui.with_layout(Layout::left_to_right(Align::Center), value);
+        });
+    });
+}
+
+fn detail_value(ui: &mut Ui, value: &str) {
+    ui.add(egui::Label::new(value).wrap());
+}
+
+/// Bandeau de message à la manière d'une barre d'information Windows.
+fn info_bar(ui: &mut Ui, status: Option<&(String, bool)>) {
+    let Some((message, is_error)) = status else {
+        return;
+    };
+    let colors = palette(ui);
+    let (fill, accent, glyph) = if *is_error {
+        (colors.danger_background, colors.danger, icon::ERROR)
+    } else {
+        (colors.success_background, colors.success, icon::SUCCESS)
+    };
+    Frame::new()
+        .fill(fill)
+        .corner_radius(CornerRadius::same(4))
+        .inner_margin(Margin::symmetric(12, 8))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_wrapped(|ui| {
+                if let Some(font) = theme::icon_font(ui, 16.0) {
+                    ui.label(RichText::new(glyph).font(font).color(accent));
+                }
+                ui.label(message);
+            });
+        });
 }
 
 fn local_date(date: &chrono::DateTime<chrono::Utc>) -> String {
@@ -711,7 +995,9 @@ mod tests {
 
     fn harness<'a>() -> Harness<'a, GuiApp> {
         let store = Store::open_in_memory().unwrap().with_kdf(FAST_KDF);
-        Harness::new_state(|ctx, app: &mut GuiApp| app.ui(ctx), GuiApp::new(store))
+        let harness = Harness::new_state(|ctx, app: &mut GuiApp| app.ui(ctx), GuiApp::new(store));
+        theme::apply(&harness.ctx);
+        harness
     }
 
     fn type_into(harness: &mut Harness<'_, GuiApp>, label: &str, text: &str) {
@@ -916,6 +1202,57 @@ mod tests {
             .abs()
             .min((first.min.y - second.max.y).abs());
         assert!(gap < 1.0, "écart : {gap}");
+    }
+
+    #[test]
+    fn copy_buttons_are_icons_aligned_at_the_end_of_their_lines() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        let username = harness.get_by_label("Copier l'identifiant").rect();
+        let password = harness.get_by_label("Copier le mot de passe").rect();
+        let reveal = harness.get_by_label("Afficher").rect();
+        assert_eq!(username.max.x, password.max.x);
+        assert!(reveal.max.x <= password.min.x);
+        assert_eq!(reveal.center().y, password.center().y);
+        assert!(username.center().y < password.center().y);
+        assert!(password.width() <= CONTROL_HEIGHT);
+    }
+
+    #[test]
+    fn edit_and_delete_are_at_the_end_of_the_name_line() {
+        let mut harness = registered();
+        add_entry(&mut harness, "https://a.example", "p1");
+        let name = harness.get_by_label("https://a.example").rect();
+        let edit = harness.get_by_label("Modifier").rect();
+        let delete = harness.get_by_label("Supprimer").rect();
+        let copy = harness.get_by_label("Copier l'identifiant").rect();
+        assert_eq!(edit.center().y, delete.center().y);
+        assert!((name.center().y - edit.center().y).abs() < 2.0);
+        assert!(edit.max.x <= delete.min.x);
+        assert_eq!(delete.max.x.round(), (copy.max.x + 17.0).round());
+    }
+
+    #[test]
+    fn account_name_is_next_to_the_lock_button() {
+        let harness = registered();
+        let name = harness.get_by_label("alice").rect();
+        let lock = harness.get_by_label("Verrouiller").rect();
+        assert!(name.max.x <= lock.min.x);
+        assert!((name.center().y - lock.center().y).abs() < 2.0);
+        assert!(lock.max.y <= harness.get_by_label("Ajouter").rect().min.y);
+    }
+
+    #[test]
+    fn entry_count_is_above_the_list_and_left_aligned() {
+        let mut harness = registered();
+        assert!(harness.query_by_label("0 entrée").is_some());
+        add_entry(&mut harness, "https://a.example", "p1");
+        assert!(harness.query_by_label("1 entrée").is_some());
+        add_entry(&mut harness, "https://b.example", "p2");
+        let count = harness.get_by_label("2 entrées").rect();
+        let add = harness.get_by_label("Ajouter").rect();
+        assert!(count.min.y >= add.max.y);
+        assert!(count.min.x < add.min.x);
     }
 
     #[test]
